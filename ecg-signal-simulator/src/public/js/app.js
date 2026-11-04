@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isRunning = true;
     let currentTime = 0;
+    let renderScheduled = false;
+    let lastMetricsUpdate = 0;
 
     const bpmSlider = document.getElementById('bpmSlider');
     const bpmVal = document.getElementById('bpmVal');
@@ -27,6 +29,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterStatus = document.getElementById('filterStatus');
     const signalHeading = document.getElementById('signalHeading');
     const statusIndicator = document.getElementById('text-status');
+
+    function scheduleRender() {
+        if (renderScheduled) return;
+
+        renderScheduled = true;
+        requestAnimationFrame(() => {
+            renderScheduled = false;
+            renderer.render();
+        });
+    }
 
     let lastArduinoOn = false;
     let lastBpm = 75;
@@ -108,12 +120,14 @@ document.addEventListener('DOMContentLoaded', () => {
             statusIndicator.textContent = arduinoOn ? 'ARDUINO' : 'SIMULACIÓN';
         }
 
+        let hasNewSamples = false;
         if (arduinoOn) {
             // El ritmo lo marca el Arduino: se procesan todas las muestras recibidas
             processor.fs = ArduinoLink.fs || fs;
             for (const rawSample of ArduinoLink.drain()) {
                 currentTime += 1 / processor.fs;
                 renderer.addSample(processor.processSample(rawSample, currentTime));
+                hasNewSamples = true;
             }
         } else {
             processor.fs = fs;
@@ -123,20 +137,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const processedSample = processor.processSample(rawSample, currentTime);
 
             renderer.addSample(processedSample);
+            hasNewSamples = true;
         }
-        renderer.render();
+        if (hasNewSamples) scheduleRender();
 
         const arduinoBpm = arduinoOn && ArduinoLink.bpm ? ArduinoLink.bpm : null;
         const currentBPM = arduinoBpm !== null ? arduinoBpm : processor.detectedBPM;
         lastBpm = currentBPM;
         lastSource = arduinoOn ? 'arduino' : 'simulado';
-        bpmDisplay.textContent = currentBPM;
 
-        const freqHz = (currentBPM / 60).toFixed(2);
-        freqDisplay.textContent = freqHz;
-
-        const rrSec = (60 / currentBPM).toFixed(2);
-        rrDisplay.textContent = rrSec;
+        const now = performance.now();
+        if (now - lastMetricsUpdate >= 250) {
+            lastMetricsUpdate = now;
+            bpmDisplay.textContent = currentBPM;
+            freqDisplay.textContent = (currentBPM / 60).toFixed(2);
+            rrDisplay.textContent = (60 / currentBPM).toFixed(2);
+        }
 
     }, intervalMs);
 });

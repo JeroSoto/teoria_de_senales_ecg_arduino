@@ -27,14 +27,16 @@ Además de la simulación interactiva en el navegador, el repositorio incluye un
 
 ### Instrucciones de Ejecución
 
-1. **Instalar dependencias de Node.js, configurar y iniciar el servidor web:**
+1. **Desde la raíz del repositorio, instalar dependencias, configurar e iniciar el servidor web:**
    ```bash
-   npm install
-   cp .env.example .env        # en Windows PowerShell: Copy-Item .env.example .env
+   npm --prefix ./ecg-signal-simulator install
+   cp ./ecg-signal-simulator/.env.example ./ecg-signal-simulator/.env
+   # En Windows PowerShell:
+   # Copy-Item .\ecg-signal-simulator\.env.example .\ecg-signal-simulator\.env
    # Abre XAMPP y pulsa "Start" en MySQL, luego:
    npm start
    ```
-   Abre tu navegador web en `http://localhost:3000`. La simulación y los filtros funcionan sin iniciar sesión; el Arduino y el historial requieren una cuenta (ver sección 5). No abras `src/public/index.html` con Live Server: la autenticación y las rutas API necesitan el servidor Node.js.
+   Al iniciar, el servidor abre automáticamente `http://localhost:3000` en el navegador predeterminado. La simulación y los filtros funcionan sin iniciar sesión; el Arduino y el historial requieren una cuenta (ver sección 5). No abras `src/public/index.html` con Live Server: la autenticación y las rutas API necesitan el servidor Node.js.
 
 2. **Ejecutar el script de Análisis de Frecuencia (FFT) y Filtrado Digital:**
    ```bash

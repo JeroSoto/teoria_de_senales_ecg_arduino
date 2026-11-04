@@ -10,7 +10,10 @@
     <header class="header">
         <div class="logo-container">
             <span class="heart-icon">🫀</span>
-            <h1>Simulador ECG & Teoría de Señales</h1>
+            <div class="brand-copy">
+                <span class="brand-kicker">LABORATORIO DIGITAL</span>
+                <h1>Simulador ECG</h1>
+            </div>
         </div>
         <div class="header-right">
             <div class="badge">Universidad de Manizales</div>
@@ -45,7 +48,20 @@
     </dialog>
 
     <main class="container">
-        <section class="monitor-section">
+        <section class="welcome-card" aria-labelledby="welcomeTitle">
+            <div class="welcome-copy">
+                <span class="eyebrow">PLATAFORMA INTERACTIVA · ECG</span>
+                <h2 id="welcomeTitle">Entiende cada latido.</h2>
+                <p>Explora cómo se genera, se mide y se procesa una señal cardíaca en tiempo real.</p>
+            </div>
+            <nav class="quick-nav" aria-label="Accesos rápidos">
+                <a href="#signalMonitor"><span>01</span> Monitor</a>
+                <a href="#simulationControls"><span>02</span> Controles</a>
+                <a href="#theory"><span>03</span> Aprende</a>
+            </nav>
+        </section>
+
+        <section class="monitor-section" id="signalMonitor" aria-label="Monitor y controles de señal">
             <div class="screen-card">
                 <div class="screen-header">
                     <h2 id="signalHeading">ECG simulado · fs = 250 Hz</h2>
@@ -153,7 +169,7 @@
                 </div>
             </div>
 
-            <div class="controls-card">
+            <div class="controls-card" id="simulationControls">
                 <h3>🎛️ Controles de Simulación y Ruido</h3>
                 <div class="controls-grid">
                     <div class="control-group">
@@ -193,7 +209,7 @@
             </div>
         </section>
 
-        <section class="theory-section">
+        <section class="theory-section" id="theory">
             <div class="theory-card">
                 <h2>📐 Teoría de Señales Aplicada al ECG</h2>
 

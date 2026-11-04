@@ -5,6 +5,13 @@ class ECGRenderer {
 
         this.buffer = new Array(this.canvas.width).fill(0);
         this.currentIndex = 0;
+        this.gridCanvas = document.createElement('canvas');
+        this.gridCanvas.width = this.canvas.width;
+        this.gridCanvas.height = this.canvas.height;
+        this.gridCtx = this.gridCanvas.getContext('2d');
+        this.gridCtx.fillStyle = '#050811';
+        this.gridCtx.fillRect(0, 0, this.gridCanvas.width, this.gridCanvas.height);
+        this.drawGrid(this.gridCanvas.width, this.gridCanvas.height, this.gridCtx);
     }
 
     addSample(sampleValue) {
@@ -18,10 +25,7 @@ class ECGRenderer {
         const centerY = height / 2;
         const scaleY = 60;
 
-        this.ctx.fillStyle = '#050811';
-        this.ctx.fillRect(0, 0, width, height);
-
-        this.drawGrid(width, height);
+        this.ctx.drawImage(this.gridCanvas, 0, 0);
 
         this.ctx.beginPath();
         this.ctx.lineWidth = 2;
@@ -49,32 +53,32 @@ class ECGRenderer {
         this.ctx.fillRect(this.currentIndex, 0, 2, height);
     }
 
-    drawGrid(width, height) {
+    drawGrid(width, height, ctx = this.ctx) {
         const smallGrid = 10;
         const largeGrid = 50;
 
-        this.ctx.beginPath();
-        this.ctx.lineWidth = 0.5;
-        this.ctx.strokeStyle = 'rgba(0, 229, 255, 0.05)';
+        ctx.beginPath();
+        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.05)';
 
         for (let x = 0; x < width; x += smallGrid) {
-            this.ctx.moveTo(x, 0); this.ctx.lineTo(x, height);
+            ctx.moveTo(x, 0); ctx.lineTo(x, height);
         }
         for (let y = 0; y < height; y += smallGrid) {
-            this.ctx.moveTo(0, y); this.ctx.lineTo(width, y);
+            ctx.moveTo(0, y); ctx.lineTo(width, y);
         }
-        this.ctx.stroke();
+        ctx.stroke();
 
-        this.ctx.beginPath();
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeStyle = 'rgba(0, 229, 255, 0.15)';
+        ctx.beginPath();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.15)';
 
         for (let x = 0; x < width; x += largeGrid) {
-            this.ctx.moveTo(x, 0); this.ctx.lineTo(x, height);
+            ctx.moveTo(x, 0); ctx.lineTo(x, height);
         }
         for (let y = 0; y < height; y += largeGrid) {
-            this.ctx.moveTo(0, y); this.ctx.lineTo(width, y);
+            ctx.moveTo(0, y); ctx.lineTo(width, y);
         }
-        this.ctx.stroke();
+        ctx.stroke();
     }
 }

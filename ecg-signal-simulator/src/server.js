@@ -3,12 +3,34 @@
 // ============================================================
 const express = require('express');
 const path = require('path');
+const { spawn } = require('child_process');
 const cookieParser = require('cookie-parser');
 
 const env = require('./config/env');
 const { iniciarBaseDeDatos } = require('./config/database');
 const ArduinoBridge = require('./services/arduinoBridge');
 const { noEncontrado, manejarErrores } = require('./middleware/errorHandler');
+
+function abrirNavegador(url) {
+  const comandos = {
+    win32: ['explorer.exe', [url]],
+    darwin: ['open', [url]],
+    linux: ['xdg-open', [url]],
+  };
+  const comando = comandos[process.platform];
+
+  if (!comando) {
+    console.warn(`[navegador] Apertura automática no disponible. Abre ${url}`);
+    return;
+  }
+
+  const proceso = spawn(comando[0], comando[1], { detached: true, stdio: 'ignore' });
+  proceso.once('error', (err) => {
+    console.warn(`[navegador] No se pudo abrir automáticamente: ${err.message}`);
+    console.warn(`[navegador] Abre ${url} manualmente.`);
+  });
+  proceso.unref();
+}
 
 function crearApp(bridge) {
   const app = express();
@@ -57,13 +79,15 @@ async function iniciar() {
 
   const app = crearApp(bridge);
   const servidor = app.listen(env.port, () => {
+    const url = `http://localhost:${env.port}`;
     console.log('====================================================');
     console.log('Servidor ECG iniciado correctamente.');
-    console.log(`Accede en tu navegador a: http://localhost:${env.port}`);
+    console.log(`Accede en tu navegador a: ${url}`);
     console.log(`Base de datos: ${env.db.name} @ ${env.db.host}:${env.db.port}`);
     console.log(`Arduino: modo ${env.arduino.mode}${env.arduino.mode === 'serial' ? ` (${env.arduino.port})` : ''}`);
     if (env.jwt.secretInseguro) console.log('Aviso: define JWT_SECRET en .env (se usa uno temporal).');
     console.log('====================================================');
+    abrirNavegador(url);
   });
 
   const cerrar = () => {
