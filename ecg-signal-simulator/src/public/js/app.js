@@ -6,8 +6,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isRunning = true;
     let currentTime = 0;
-    let renderScheduled = false;
     let lastMetricsUpdate = 0;
+
+    // Bucle de tiempo real: se generan tantas muestras como indique el reloj (no una por "tick").
+    // Así la señal avanza a fs = 250 muestras/s aunque el navegador espere más de 4 ms entre ciclos
+    // (setInterval se limita a ≥ 4 ms, y a 1 s en pestañas en segundo plano, sobre todo en celulares).
+    const MAX_CATCHUP_S = 0.25;   // si la pestaña estuvo detenida, no se "recupera" más de 250 ms de señal
+    let lastFrame = null;
+    let sampleDebt = 0;           // muestras pendientes de generar (parte fraccionaria incluida)
 
     const bpmSlider = document.getElementById('bpmSlider');
     const bpmVal = document.getElementById('bpmVal');
@@ -30,18 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const signalHeading = document.getElementById('signalHeading');
     const statusIndicator = document.getElementById('text-status');
 
-    function scheduleRender() {
-        if (renderScheduled) return;
-
-        renderScheduled = true;
-        requestAnimationFrame(() => {
-            renderScheduled = false;
-            renderer.render();
-        });
-    }
-
     let lastArduinoOn = false;
-    let lastBpm = 75;
+    let lastBpm = null;          // null = aún no hay una medición válida
     let lastSource = 'simulado';
 
     // Permite que el historial (history.js) consulte la lectura actual
@@ -105,19 +101,28 @@ document.addEventListener('DOMContentLoaded', () => {
         filterStatus.textContent = active.length > 0 ? active.join(' + ') : 'INACTIVOS';
     }
 
-    const intervalMs = 1000 / fs;
+    // Muestra un valor numérico o "--" mientras todavía no hay medición
+    const mostrar = (valor, decimales = 0) => (valor === null || !Number.isFinite(valor) ? '--' : valor.toFixed(decimales));
 
-    setInterval(() => {
+    function ciclo(ahora) {
+        requestAnimationFrame(ciclo);
+
+        // El reloj avanza siempre, incluso en pausa, para no generar una ráfaga de muestras al reanudar
+        const dt = lastFrame === null ? 0 : Math.min((ahora - lastFrame) / 1000, MAX_CATCHUP_S);
+        lastFrame = ahora;
         if (!isRunning) return;
 
         // ¿La señal viene del Arduino (vía servidor) o del generador simulado?
-        const arduinoOn = !!(window.ArduinoLink && ArduinoLink.active);
+        // ArduinoLink es un "const" de otro script: no cuelga de window, por eso se consulta con typeof
+        const arduinoOn = typeof ArduinoLink !== 'undefined' && ArduinoLink.active;
         if (arduinoOn !== lastArduinoOn) {
             lastArduinoOn = arduinoOn;
             signalHeading.textContent = arduinoOn
                 ? 'ECG real · Arduino AD8232'
                 : 'ECG simulado · fs = 250 Hz';
             statusIndicator.textContent = arduinoOn ? 'ARDUINO' : 'SIMULACIÓN';
+            processor.resetDetector();     // otra señal → el detector debe recalibrarse
+            sampleDebt = 0;
         }
 
         let hasNewSamples = false;
@@ -131,28 +136,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             processor.fs = fs;
-            currentTime += 1 / fs;
-
-            const rawSample = generator.nextSample();
-            const processedSample = processor.processSample(rawSample, currentTime);
-
-            renderer.addSample(processedSample);
-            hasNewSamples = true;
+            sampleDebt += dt * fs;
+            while (sampleDebt >= 1) {
+                sampleDebt -= 1;
+                currentTime += 1 / fs;
+                const rawSample = generator.nextSample();
+                renderer.addSample(processor.processSample(rawSample, currentTime));
+                hasNewSamples = true;
+            }
         }
-        if (hasNewSamples) scheduleRender();
+        if (hasNewSamples) renderer.render();
 
         const arduinoBpm = arduinoOn && ArduinoLink.bpm ? ArduinoLink.bpm : null;
         const currentBPM = arduinoBpm !== null ? arduinoBpm : processor.detectedBPM;
         lastBpm = currentBPM;
         lastSource = arduinoOn ? 'arduino' : 'simulado';
 
-        const now = performance.now();
-        if (now - lastMetricsUpdate >= 250) {
-            lastMetricsUpdate = now;
-            bpmDisplay.textContent = currentBPM;
-            freqDisplay.textContent = (currentBPM / 60).toFixed(2);
-            rrDisplay.textContent = (60 / currentBPM).toFixed(2);
+        if (ahora - lastMetricsUpdate >= 250) {
+            lastMetricsUpdate = ahora;
+            bpmDisplay.textContent = mostrar(currentBPM);
+            freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
+            rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
         }
+    }
 
-    }, intervalMs);
+    renderer.render();               // dibuja la cuadrícula desde el primer instante
+    requestAnimationFrame(ciclo);
 });

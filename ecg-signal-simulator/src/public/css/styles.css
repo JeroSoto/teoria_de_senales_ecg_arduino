@@ -571,7 +571,7 @@ select, .auth-dialog input {
 @media (max-width: 760px) {
     .header { padding: 0.85rem 1rem; }
     .header-right { gap: 0.65rem; }
-    .badge { display: none; }
+    .badge:not(a) { display: none; }
     .container {
         grid-template-columns: minmax(0, 1fr);
         gap: 0.9rem;
@@ -610,3 +610,28 @@ select, .auth-dialog input {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Modo demostración (sitio estático, sin servidor) ---------- */
+.demo-banner {
+    margin: 1rem auto 0;
+    max-width: 1400px;
+    width: calc(100% - 2rem);
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--accent-yellow);
+    border-radius: 0 0.55rem 0.55rem 0;
+    background: rgba(255, 210, 123, 0.08);
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.6;
+}
+.demo-banner[hidden] { display: none; }
+.demo-banner strong { color: var(--accent-yellow); }
+.demo-banner code { color: var(--accent-cyan); }
+body.modo-demo #authBar,
+body.modo-demo #arduinoCard,
+body.modo-demo #historyCard,
+body.modo-demo #adminCard { display: none !important; }
+
+/* Enlace a la presentación (visible también en celulares) */
+a.badge { text-decoration: none; display: inline-block; }
+a.badge:hover { border-color: var(--accent-green); color: var(--accent-green); }

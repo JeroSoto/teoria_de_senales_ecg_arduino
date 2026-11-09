@@ -1,0 +1,8 @@
+# Dependencias de Python para el análisis de señales (scripts/analisis_fft.py)
+# Probado con Python 3.13. Instalar con:  pip install -r requirements.txt
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+# Solo para recortar las gráficas de la presentación (scripts/preparar_presentacion.py);
+# matplotlib ya la instala como dependencia
+pillow>=10.0

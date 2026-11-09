@@ -7,7 +7,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "analyze": "python3 scripts/analisis_fft.py",
-    "test": "node --test --test-concurrency=1 tests/bridge.test.js tests/api.test.js",
+    "test": "node --test --test-concurrency=1 tests/detector.test.js tests/bridge.test.js tests/api.test.js",
     "db:check": "node scripts/probar-conexion-db.js",
     "usuario": "node scripts/crear-usuario.js",
     "puertos": "node scripts/listar-puertos.js"

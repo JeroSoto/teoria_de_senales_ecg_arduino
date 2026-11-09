@@ -17,6 +17,7 @@
         </div>
         <div class="header-right">
             <div class="badge">Universidad de Manizales</div>
+            <a class="badge" href="presentacion/index.html">Presentación</a>
             <div class="auth-bar" id="authBar">
                 <span id="authUser" class="auth-user" hidden></span>
                 <button id="btnLogin" class="btn btn-connect btn-small" type="button">Iniciar sesión</button>
@@ -46,6 +47,12 @@
             <p class="auth-switch"><button id="authSwitch" class="link-btn" type="button">¿No tienes cuenta? Crear una</button></p>
         </form>
     </dialog>
+
+    <div class="demo-banner" id="demoBanner" role="note" hidden>
+        <strong>Modo demostración.</strong>
+        Esta versión web incluye el simulador, los filtros y el análisis de señales.
+        El inicio de sesión, el historial (MySQL) y el enlace con el Arduino solo existen cuando se ejecuta el servidor con <code>npm start</code>.
+    </div>
 
     <main class="container">
         <section class="welcome-card" aria-labelledby="welcomeTitle">
@@ -78,17 +85,17 @@
                 <div class="metrics-grid">
                     <div class="metric-card">
                         <span class="metric-label">Frecuencia cardíaca</span>
-                        <span class="metric-value" id="bpmDisplay">75</span>
+                        <span class="metric-value" id="bpmDisplay">--</span>
                         <span class="metric-unit">lpm</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-label">Frecuencia fundamental (f)</span>
-                        <span class="metric-value" id="freqDisplay">1.25</span>
+                        <span class="metric-value" id="freqDisplay">--</span>
                         <span class="metric-unit">Hz</span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-label">Intervalo RR</span>
-                        <span class="metric-value" id="rrDisplay">0.80</span>
+                        <span class="metric-value" id="rrDisplay">--</span>
                         <span class="metric-unit">s</span>
                     </div>
                     <div class="metric-card">
@@ -243,7 +250,9 @@
                 <article class="theory-block">
                     <h3>3. Algoritmo de Detección de Picos R (Pan-Tompkins)</h3>
                     <p>
-                        A partir del intervalo entre dos complejos QRS consecutivos se obtiene la frecuencia cardíaca y su frecuencia fundamental:
+                        El detector aplica: pasa-banda 5–15 Hz → derivada → elevación al cuadrado → integración en ventana de 150 ms → umbral adaptativo.
+                        A partir del intervalo entre dos complejos QRS consecutivos se obtiene la frecuencia cardíaca y su frecuencia fundamental
+                        (se muestra «--» mientras el detector se calibra, unos segundos):
                     </p>
                     <div class="formula-box formula-stack" role="math" aria-label="BPM es igual a 60 dividido entre el intervalo RR; frecuencia en hercios es BPM dividido entre 60">
                         <div class="equation">

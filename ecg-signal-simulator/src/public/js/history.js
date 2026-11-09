@@ -37,6 +37,11 @@ const History = {
 
     async guardarAhora() {
         const { bpm, fuente } = window.ECGApp.getState();
+        if (bpm === null) {
+            // El detector necesita unos segundos (2 s de calibración + 2 latidos) antes de entregar un BPM
+            this.mensaje('Aún no hay una medición de frecuencia cardíaca; se guardará en el siguiente intento.', true);
+            return;
+        }
         try {
             await API.post('/api/mediciones', { bpm, fuente });
             this.mensaje(`Guardado: ${bpm} lpm (${fuente}).`);

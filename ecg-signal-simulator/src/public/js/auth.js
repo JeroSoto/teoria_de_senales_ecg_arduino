@@ -19,7 +19,18 @@ const Auth = {
         // Restaura la sesión si la cookie sigue vigente
         API.get('/api/auth/yo')
             .then((r) => this.fijarUsuario(r.usuario))
-            .catch(() => this.fijarUsuario(null));
+            .catch((err) => {
+                // Con el servidor activo, "no hay sesión" responde 401. Sin servidor (GitHub Pages, Live Server o
+                // abrir el archivo directamente) la petición falla o devuelve 404/405: se activa el modo demostración.
+                if (!err.status || err.status === 404 || err.status === 405) this.modoDemo();
+                this.fijarUsuario(null);
+            });
+    },
+
+    /** Sin servidor solo funciona el simulador: se ocultan sesión, Arduino e historial. */
+    modoDemo() {
+        document.body.classList.add('modo-demo');
+        document.getElementById('demoBanner').hidden = false;
     },
 
     abrir(modo) {

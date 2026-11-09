@@ -36,10 +36,11 @@ Además de la simulación interactiva en el navegador, el repositorio incluye un
    # Abre XAMPP y pulsa "Start" en MySQL, luego:
    npm start
    ```
-   Al iniciar, el servidor abre automáticamente `http://localhost:3000` en el navegador predeterminado. La simulación y los filtros funcionan sin iniciar sesión; el Arduino y el historial requieren una cuenta (ver sección 5). No abras `src/public/index.html` con Live Server: la autenticación y las rutas API necesitan el servidor Node.js.
+   Al iniciar, el servidor abre automáticamente `http://localhost:3000` en el navegador predeterminado. La simulación y los filtros funcionan sin iniciar sesión; el Arduino y el historial requieren una cuenta (ver sección 5). Si abres `src/public/index.html` con Live Server (o publicas la carpeta `src/public` como sitio estático) funciona solo el **modo demostración**: simulador, filtros y análisis, sin sesión, Arduino ni historial (ver sección 6).
 
-2. **Ejecutar el script de Análisis de Frecuencia (FFT) y Filtrado Digital:**
+2. **Ejecutar el script de Análisis de Frecuencia (FFT) y Filtrado Digital** (desde la carpeta `ecg-signal-simulator`):
    ```bash
+   pip install -r ../requirements.txt
    python3 scripts/analisis_fft.py
    ```
    o mediante el script de npm:
@@ -65,11 +66,10 @@ Para una frecuencia cardíaca estándar de $75\text{ BPM}$, la frecuencia fundam
 ### 3.3. Análisis Frecuencial mediante FFT
 La Transformada Discreta de Fourier (DFT) transforma la señal del dominio del tiempo $x[n]$ al dominio frecuencial $X[k]$:
 $$X[k] = \sum_{n=0}^{N-1} x[n] \cdot e^{-j 2\pi \frac{k n}{N}}$$
-En el espectro de magnitud $|X[k]|$, se identifican claramente:
-* **Pico en $1.25\text{ Hz}$:** Frecuencia cardíaca fundamental.
-* **Armónicos en $2.5\text{ Hz}, 3.75\text{ Hz}, \dots$:** Forma no sinusoidal del complejo QRS.
-* **Pico en $60\text{ Hz}$:** Interferencia capacitiva de la red eléctrica.
-* **Lóbulo en $<0.5\text{ Hz}$:** Deriva de la línea base respiratoria.
+En el espectro de magnitud $|X[k]|$ (ver `results/README_resultados.md`) se identifican:
+* **Líneas a múltiplos de $1.25\text{ Hz}$** ($= \text{BPM}/60$): la fundamental (1.25 Hz) y sus armónicos (2.5, 3.75, 5.0 Hz…). El ECG es periódico pero *no sinusoidal*, por eso la energía se reparte en muchos armónicos y las líneas más altas no son la fundamental sino las de 3.75 y 5.0 Hz (la fundamental es de ≈ 0.05 mV y esas, de ≈ 0.08 mV).
+* **Línea en $60\text{ Hz}$:** interferencia capacitiva de la red eléctrica.
+* **Máximo cerca de $0\text{ Hz}$:** deriva de la línea base respiratoria ($< 0.5\text{ Hz}$); no es el latido.
 
 ---
 
@@ -79,13 +79,14 @@ En el espectro de magnitud $|X[k]|$, se identifican claramente:
 * `src/models/`: modelos Sequelize `Usuario`, `Medicion` y `ComandoLog`.
 * `src/routes/`: rutas `auth`, `arduino`, `mediciones` y `admin`.
 * `src/services/`: puente con el Arduino (`arduinoBridge.js`), transporte serial real y Arduino simulado.
-* `src/public/`: Aplicación frontend en HTML5 Canvas, CSS3 y JS Vanilla (`auth.js`, `arduinoLink.js`, `history.js`, `api.js` se añadieron en la v2.0).
+* `src/public/`: Aplicación frontend en HTML5 Canvas, CSS3 y JS Vanilla (`auth.js`, `arduinoLink.js`, `history.js`, `api.js` se añadieron en la v2.0). `signalProcessing.js` contiene los filtros y el detector Pan-Tompkins; `ecgGenerator.js`, el modelo sintético.
 * `arduino/ecg_serial/ecg_serial.ino`: sketch para Arduino Uno/Nano + AD8232.
 * `database/schema.sql`: esquema para importar desde phpMyAdmin.
-* `tests/`: pruebas automáticas (`npm test`).
+* `tests/`: pruebas automáticas (`npm test`): `detector.test.js` (DSP del navegador), `bridge.test.js` y `api.test.js`.
 * `.env.example`: plantilla de configuración.
-* `scripts/analisis_fft.py`: Script de Python para cálculo de la FFT y filtros SciPy.
-* `results/`: Gráficas generadas (`ecg_time_and_fft.png`, `ecg_filtering_analysis.png`).
+* `scripts/analisis_fft.py`: Script de Python para caracterización, FFT y filtros SciPy (dependencias en `../requirements.txt`).
+* `data/muestra_ecg_sintetico.json`: 2 s de ECG limpio (500 muestras a 250 Hz) generados por el mismo script.
+* `results/`: Gráficas y tablas generadas (`ecg_time_and_fft.png`, `ecg_filtering_analysis.png`, `caracterizacion.md`) con su interpretación en `README_resultados.md`.
 * `docs/teoria_senales.md`: Apuntes teóricos detallados de la asignatura.
 
 ---
@@ -182,7 +183,7 @@ Automáticas (requieren MySQL de XAMPP encendido; usan la base aparte `arduino_e
 npm test
 ```
 
-Cubren 14 casos: protocolo del puente, comandos válidos e inválidos, registro, login, inyección SQL, hash bcrypt, permisos admin, SSE, historial y logout.
+Cubren 24 casos: protocolo del puente, comandos válidos e inválidos, registro, login, inyección SQL, hash bcrypt, permisos admin, SSE, historial y logout (14, con MySQL) y, en `tests/detector.test.js` (10, sin MySQL), el detector de latidos (precisión de ±2 lpm entre 40 y 180 lpm; ±3 lpm con ruido, red de 60 Hz y deriva), la continuidad de fase del generador y la respuesta en frecuencia de los filtros.
 
 Lista de verificación manual:
 
@@ -209,3 +210,14 @@ Lista de verificación manual:
 | Puerto 3000 ocupado | Cambia `PORT` en `.env` |
 
 > **Aviso:** el sistema con Arduino sigue siendo **educativo**; no es un dispositivo médico, no sirve para diagnóstico y no debe usarse para decisiones de salud.
+
+---
+
+## 6. Versión web de demostración (cualquier celular o computador)
+
+El simulador (generador de ECG, ruido, filtros, FFT teórica, detector de latidos y BPM) es 100 % JavaScript del lado del navegador, así que se publica como **sitio estático** en GitHub Pages sin servidor:
+
+* El flujo de trabajo `.github/workflows/pages.yml` (en la raíz del repositorio) publica `ecg-signal-simulator/src/public` en cada `git push` a `main`.
+* Una sola vez, en GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+* La dirección queda en `https://<usuario>.github.io/<repositorio>/`. Se abre desde un celular sin instalar nada.
+* En esa versión la página detecta que no hay API (`/api/auth/yo` no responde) y entra en **modo demostración**: oculta inicio de sesión, Arduino e historial y muestra un aviso. Esas funciones requieren Node.js + MySQL + el Arduino conectado por USB al computador, por lo que no se pueden publicar en un hosting estático.

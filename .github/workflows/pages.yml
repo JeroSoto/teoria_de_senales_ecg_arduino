@@ -1,0 +1,41 @@
+# Publica el simulador (carpeta ecg-signal-simulator/src/public) como sitio web estático en GitHub Pages.
+# Una sola vez, en GitHub:  Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Después, cada "git push" a main actualiza la página. La dirección queda en:
+#   https://<usuario>.github.io/<repositorio>/
+name: Publicar demo web (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir el sitio estático
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ecg-signal-simulator/src/public
+
+      - name: Desplegar
+        id: deployment
+        uses: actions/deploy-pages@v4

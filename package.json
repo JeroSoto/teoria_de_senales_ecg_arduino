@@ -5,6 +5,7 @@
   "scripts": {
     "start": "npm --prefix ./ecg-signal-simulator start",
     "dev": "npm --prefix ./ecg-signal-simulator run dev",
-    "test": "npm --prefix ./ecg-signal-simulator test"
+    "test": "npm --prefix ./ecg-signal-simulator test",
+    "analyze": "npm --prefix ./ecg-signal-simulator run analyze"
   }
 }

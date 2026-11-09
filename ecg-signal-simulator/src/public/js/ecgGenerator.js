@@ -7,16 +7,17 @@ class ECGGenerator {
         this.enableHum = false;
         this.enableWander = false;
         this.t = 0;
+        this.phase = 0;   // fase del latido (0–1): se acumula para que cambiar el BPM no genere saltos
     }
 
     nextSample() {
         const dt = 1 / this.fs;
         this.t += dt;
 
-        const Tbeat = 60 / this.bpm;
-        const phase = (this.t % Tbeat) / Tbeat;
+        this.phase += this.bpm / 60 * dt;   // el ritmo actual avanza la fase en cada muestra
+        if (this.phase >= 1) this.phase -= 1;
 
-        let ecgClean = this.gaussianWave(phase) * this.amplitude;
+        let ecgClean = this.gaussianWave(this.phase) * this.amplitude;
         let noise = 0;
 
         if (this.noiseLevel > 0) {
@@ -60,4 +61,9 @@ class ECGGenerator {
         while (u1 === 0) u1 = Math.random();
         return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
     }
+}
+
+// Permite probar esta clase con Node.js (npm test); en el navegador no hace nada
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ECGGenerator };
 }
