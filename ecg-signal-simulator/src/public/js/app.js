@@ -103,6 +103,18 @@ document.addEventListener('DOMContentLoaded', () => {
         statusPill.dataset.estado = !isRunning ? 'pausa' : clase;
     }
 
+    /** Texto bajo el monitor cuando la señal viene del Arduino: explica por qué hay (o no) un BPM. */
+    function avisoCalidad(calidad) {
+        const textos = {
+            calibrando: 'Midiendo… quédate quieto: la frecuencia cardíaca aparece en unos 5 segundos.',
+            buena: 'Señal real del Arduino: frecuencia cardíaca confiable (mediana de los últimos 8 latidos). Activa los filtros para limpiar el trazo.',
+            ruido: 'Señal con mucho ruido: no se muestra una frecuencia cardíaca para no dar un valor falso. Quédate quieto, no hables y revisa que los 3 electrodos estén bien pegados.',
+            irregular: 'Latidos irregulares o artefactos de movimiento: quédate quieto unos segundos.',
+            'sin-senal': 'No se detectan latidos: revisa que los 3 electrodos (RA, LA, RL) estén pegados a la piel y conectados al AD8232.',
+        };
+        return textos[calidad] || 'Señal del Arduino en formato del Serial Plotter: la frecuencia cardíaca la calcula el Arduino.';
+    }
+
     // Muestra un valor numérico o "--" mientras todavía no hay medición
     const mostrar = (valor, decimales = 0) => (valor === null || !Number.isFinite(valor) ? '--' : valor.toFixed(decimales));
 
@@ -155,8 +167,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (hasNewSamples) renderer.render();
 
-        const arduinoBpm = fuente && fuente.bpm ? fuente.bpm : null;
-        const currentBPM = arduinoBpm !== null ? arduinoBpm : processor.detectedBPM;
+        // ¿Qué frecuencia cardíaca se muestra?
+        //  - Con la señal completa (≥ 100 Hz) manda el detector de la página: ve las mismas muestras
+        //    que se dibujan y solo da un valor si la señal es confiable (si no, "--").
+        //  - Con el formato del Serial Plotter (40 puntos/s) no se puede detectar aquí: se usa la del Arduino.
+        const usarArduino = fuente && processor.fs < 100;
+        const currentBPM = usarArduino ? (fuente.bpm || null) : processor.detectedBPM;
         lastBpm = currentBPM;
         lastSourceName = fuente ? 'arduino' : 'simulado';
 
@@ -166,6 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
             freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
             rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
             pintarEstado(fuente);
+            if (fuente) signalNotice.textContent = avisoCalidad(usarArduino ? null : processor.calidad);
         }
     }
 

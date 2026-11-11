@@ -12,6 +12,8 @@ El sketch del proyecto es **`ecg_plotter_teoria/ecg_plotter_teoria.ino`**. Sirve
 
 No hay que cambiar nada entre uno y otro: solo **un programa a la vez** puede usar el puerto USB.
 
+**Versión 3.0 — frecuencia cardíaca confiable.** La detección de latidos sigue el algoritmo de Pan-Tompkins (pasa-banda 5–15 Hz, derivada, cuadrado, integración, umbral adaptativo) con período refractario de 200 ms y discriminación de la onda T por su pendiente. La FC es la mediana de los últimos 8 intervalos RR y solo se muestra si la señal es confiable; si no, `FC = 0` en el Plotter, `H,0` en la página y el informe de texto (`M`) explica por qué (ruido, latidos irregulares o sin latidos). La versión anterior contaba la onda T y el ruido como latidos y marcaba alrededor de 200 lpm.
+
 ## Cableado
 
 | AD8232 | Arduino Uno/Nano |
@@ -37,7 +39,8 @@ Electrodos: conecta el cable de 3 derivaciones (RA, LA, RL) a las almohadillas a
 4. Pulsa **Subir**.
 5. *Herramientas → Serial Plotter* y elige **115200 baud** abajo a la derecha. Verás la onda (`I`, `II`… en la leyenda), `FC` y `Cero`.
    Escribe `II`, `V1`… en *Type Message* para etiquetar la derivación; `M` para informes de texto, `P` para volver a la gráfica, `RESUMEN` y `AYUDA`.
-6. Prueba sin sensor: pon `MODO_DEMO = true` y vuelve a subirlo (ECG sintético de 72 lpm).
+6. Prueba sin sensor: pon `MODO_DEMO = true` y vuelve a subirlo (ECG sintético de 72 lpm con onda T alta: la FC debe marcar 72, no 144).
+7. Para medir: quédate quieto y sin hablar; la FC aparece a los ~5 s (2 s de calibración + 4 latidos).
 
 ## Ver la señal en la página
 

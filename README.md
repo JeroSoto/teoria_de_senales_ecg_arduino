@@ -30,7 +30,8 @@ Se estudia el **electrocardiograma (ECG)**: una señal bioeléctrica analógica,
 | Generador de ECG sintético (5 gaussianas P-Q-R-S-T) con controles de BPM, amplitud, ruido, red de 60 Hz y deriva | ✅ Funciona (navegador) |
 | Visualización en tiempo real (canvas, fs = 250 Hz) | ✅ Funciona |
 | Filtros digitales: pasa-altas 0.5 Hz, notch 60 Hz, pasa-bajas 40 Hz | ✅ Funciona; respuesta en frecuencia comprobada con pruebas automáticas |
-| Detector de latidos Pan-Tompkins y BPM | ✅ Funciona: error ≤ 2 lpm entre 40 y 180 lpm (señal normal); ≤ 3 lpm con ruido, 60 Hz y deriva |
+| Detector de latidos Pan-Tompkins y BPM | ✅ Error ≤ 2 lpm entre 40 y 180 lpm; ≤ 3 lpm con ruido, 60 Hz y deriva. **v3:** no cuenta la onda T (aunque sea alta) y, sin electrodos o con mucho ruido, muestra «--» en lugar de un BPM falso (antes marcaba ~200 lpm) |
+| BPM calculado en el Arduino (sketch v3.0) | ✅ Mismo algoritmo en el Uno (57 % de flash, 60 % de RAM): validado con una réplica del código en 12 señales tipo AD8232 |
 | Análisis FFT, caracterización y filtrado con SciPy (`scripts/analisis_fft.py`) | ✅ Funciona y es reproducible (semilla fija) |
 | Servidor Node.js + Express + Sequelize + MySQL: usuarios e historial de BPM | ✅ Funciona (24 pruebas automáticas pasan) |
 | Enlace con Arduino por puerto serial (protocolo propio, comandos con confirmación) | ✅ Detección automática del puerto, mensajes cuando el Arduino IDE lo ocupa y botón para liberarlo. Probado con el Arduino simulado y con el protocolo del sketch; **pendiente:** validar con el AD8232 y electrodos reales |
@@ -81,7 +82,8 @@ El Arduino IDE puede quedar abierto, pero **cierra su Serial Plotter / Monitor S
 * **Análisis frecuencial (DFT/FFT):** resolución Δf = fs/N, espectro de magnitud de una cara, armónicos de una señal periódica no sinusoidal, **fuga espectral** (por eso el análisis usa 8 s = 10 latidos exactos).
 * **Ruido e interferencia:** gaussiano (banda ancha), sinusoidal de 60 Hz (línea espectral) y deriva (baja frecuencia).
 * **Sistemas LTI y filtros digitales IIR:** ecuaciones en diferencias del pasa-altas y del pasa-bajas de 1.er orden, notch con ceros en el círculo unidad, Butterworth de 2.º orden y filtrado de fase cero (`filtfilt`) en Python.
-* **Detección de eventos:** pasa-banda, derivada, cuadrado, integración en ventana móvil y umbral adaptativo (Pan-Tompkins).
+* **Detección de eventos:** pasa-banda, derivada, cuadrado, integración en ventana móvil y umbral adaptativo (Pan-Tompkins), con período refractario, discriminación de la onda T por su pendiente y búsqueda hacia atrás.
+* **Estadística robusta:** BPM con la mediana de los últimos 8 intervalos RR y control de calidad (relación señal/ruido ≥ 3 y 6 de 8 intervalos a ±15 % de la mediana) para no mostrar valores falsos.
 
 Desarrollo matemático completo en [`ecg-signal-simulator/docs/teoria_senales.md`](ecg-signal-simulator/docs/teoria_senales.md).
 
@@ -105,7 +107,7 @@ Señal de ejemplo: 75 lpm, fs = 250 Hz, 8 s (N = 2000), Δf = 0.125 Hz. Valores 
 
 ### Validación
 * **24 pruebas automáticas** (puente Arduino, API, detector de latidos, continuidad del generador y respuesta de los filtros).
-* El detector mide el BPM con error ≤ 2 lpm entre 40 y 180 lpm. Limitación conocida: con relación señal/ruido muy baja (amplitud 0.3× con ruido de 30 %) puede equivocarse.
+* El detector mide el BPM con error ≤ 2 lpm entre 40 y 180 lpm. En señales tipo AD8232 (onda T de hasta 1.2 mV, red de 60 Hz fuerte, QRS pequeño, QRS invertido, golpes) acierta en el 100 % de las lecturas; sin electrodos muestra «--» siempre; con ráfagas de ruido muscular nunca da un valor equivocado, pero muestra «--» mientras dura el ruido.
 
 ## 8. Referencias
 

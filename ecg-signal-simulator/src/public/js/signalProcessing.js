@@ -20,6 +20,8 @@ class Biquad {
             b0 = (1 + cos) / 2; b1 = -(1 + cos); b2 = b0;
         } else if (type === 'lowpass') {
             b0 = (1 - cos) / 2; b1 = 1 - cos; b2 = b0;
+        } else if (type === 'notch') {
+            b0 = 1; b1 = -2 * cos; b2 = 1;
         } else {
             throw new Error('Tipo de filtro no soportado: ' + type);
         }
@@ -48,15 +50,22 @@ class Biquad {
 }
 
 /**
- * Detector de QRS (Pan-Tompkins):
+ * Detector de QRS (Pan-Tompkins, 1985):
+ *   0) notch de 60 Hz (red eléctrica)
  *   1) pasa-banda 5–15 Hz (pasa-altas + pasa-bajas)   2) derivada de 5 puntos
  *   3) elevación al cuadrado                          4) integración en ventana móvil de 150 ms
  *   5) umbral adaptativo entre el nivel de señal (SPK) y el de ruido (NPK)
+ *   6) período refractario de 200 ms y discriminación de la onda T: un pico entre 200 y 360 ms
+ *      después del QRS con menos de la mitad de su PENDIENTE máxima es la onda T (la T puede ser
+ *      alta, pero siempre es mucho menos empinada que el QRS)
+ *   7) búsqueda hacia atrás: si pasa 1.66 × RR sin latido, se acepta el mejor pico que quedó
+ *      por debajo del umbral (con un umbral a la mitad)
  * process(x) devuelve el índice de muestra del pico R detectado o null.
  */
 class QRSDetector {
     constructor(fs) {
         this.fs = fs;
+        this.notch = fs > 130 ? new Biquad('notch', 60, fs, 5) : null;
         this.hp = new Biquad('highpass', 5, fs);
         this.lp = new Biquad('lowpass', 15, fs);
         this.ventana = Math.max(2, Math.round(0.15 * fs));
@@ -72,26 +81,47 @@ class QRSDetector {
         this.umbral = Infinity;
         this.calentamiento = Math.round(2 * fs);   // 2 s para calibrar los niveles
         this.maxCalentamiento = 0;
-        this.refractario = Math.round(0.25 * fs);  // 250 ms: no hay dos QRS tan seguidos
-        this.ultimaDeteccion = -Infinity;           // muestra en la que se tomó la última decisión de latido
+        this.refractario = Math.round(0.2 * fs);   // 200 ms: período refractario absoluto del corazón
+        this.ventanaT = Math.round(0.36 * fs);     // 360 ms: hasta aquí un pico puede ser la onda T
+        this.ultimaDeteccion = -Infinity;           // muestra del último pico R aceptado
+        this.ampQRS = 0;                            // pendiente máxima típica de los QRS recientes
+        this.rrDetector = [];                       // últimos RR (en muestras) para la búsqueda hacia atrás
+        this.rrPromedio = 0;
+        this.candidato = null;                      // mejor pico bajo el umbral desde el último QRS
         this.busqueda = Math.max(2, Math.round(0.2 * fs));   // se busca el pico R en los 200 ms previos a la decisión
-        this.absBanda = new Float64Array(this.busqueda);     // |señal pasa-banda| de las últimas muestras
+        this.pendienteAbs = new Float64Array(this.busqueda); // |derivada del pasa-banda| de las últimas muestras
         this.decaimiento = Math.pow(0.6, 1 / fs);  // los niveles bajan 40 % por segundo sin latidos
         this.iniciado = false;
     }
 
+    /** Acepta un QRS: actualiza niveles, RR del detector y amplitud típica. */
+    registrar(r, pico, amp, peso) {
+        this.spk = peso * pico + (1 - peso) * this.spk;
+        if (Number.isFinite(this.ultimaDeteccion)) {
+            this.rrDetector.push(r - this.ultimaDeteccion);
+            if (this.rrDetector.length > 8) this.rrDetector.shift();
+            this.rrPromedio = this.rrDetector.reduce((s, v) => s + v, 0) / this.rrDetector.length;
+        }
+        this.ultimaDeteccion = r;
+        this.ampQRS = this.ampQRS ? 0.7 * this.ampQRS + 0.3 * amp : amp;
+        this.candidato = null;
+        return r;
+    }
+
     process(x) {
         if (!this.iniciado) {
+            if (this.notch) this.notch.prime(x);
             this.hp.prime(x);
             this.lp.prime(0);
             this.iniciado = true;
         }
-        // 1) pasa-banda 5–15 Hz
-        const b = this.lp.process(this.hp.process(x));
-        this.absBanda[this.n % this.busqueda] = Math.abs(b);
+        // 0) notch de 60 Hz y 1) pasa-banda 5–15 Hz
+        const v = this.notch ? this.notch.process(x) : x;
+        const b = this.lp.process(this.hp.process(v));
         // 2) derivada: y[n] = (2x[n] + x[n-1] - x[n-3] - 2x[n-4]) / 8
         const d = (2 * b + this.h[0] - this.h[2] - 2 * this.h[3]) / 8;
         this.h = [b, this.h[0], this.h[1], this.h[2]];
+        this.pendienteAbs[this.n % this.busqueda] = Math.abs(d);
         // 3) cuadrado
         const cuadrado = d * d;
         // 4) integración en ventana móvil
@@ -104,36 +134,61 @@ class QRSDetector {
         let latido = null;
         if (this.n >= 2 && this.i1 > this.i2 && this.i1 >= integrada) {
             const pico = this.i1;
-            const idx = this.n - 1;
             if (this.n < this.calentamiento) {
                 this.maxCalentamiento = Math.max(this.maxCalentamiento, pico);
-            } else if (pico > this.umbral && idx - this.ultimaDeteccion > this.refractario) {
-                this.spk = 0.125 * pico + 0.875 * this.spk;
-                this.ultimaDeteccion = idx;
+            } else {
                 // La señal integrada tiene una meseta de ~150 ms: su máximo "baila" de un latido a otro.
-                // Por eso se ubica el pico R como el máximo de |pasa-banda| en los 200 ms previos,
-                // y los intervalos RR salen casi sin jitter.
-                let mejor = -1;
+                // Por eso el latido se ubica en la pendiente máxima (el flanco más empinado del QRS) dentro
+                // de los 200 ms previos: los intervalos RR salen casi sin jitter. Esa pendiente es también
+                // la que se compara para distinguir el QRS de la onda T.
+                let r = this.n - 1;
+                let amp = -1;
                 for (let j = 0; j < this.busqueda; j++) {
-                    const v = this.absBanda[(this.n - j) % this.busqueda];
-                    if (v > mejor) { mejor = v; latido = this.n - j; }
+                    const a = this.pendienteAbs[(this.n - j) % this.busqueda];
+                    if (a > amp) { amp = a; r = this.n - j; }
                 }
-            } else if (pico <= this.umbral) {
-                this.npk = 0.125 * pico + 0.875 * this.npk;
+                const dt = r - this.ultimaDeteccion;
+                if (pico > this.umbral) {
+                    if (dt <= this.refractario) {
+                        // mismo complejo QRS (o ruido pegado a él): se ignora
+                    } else if (dt < this.ventanaT && amp < 0.5 * this.ampQRS) {
+                        this.npk = 0.125 * pico + 0.875 * this.npk;   // 6) es la onda T, no un latido
+                    } else {
+                        latido = this.registrar(r, pico, amp, 0.125);
+                    }
+                } else {
+                    this.npk = 0.125 * pico + 0.875 * this.npk;
+                    if (dt > this.ventanaT && (!this.candidato || pico > this.candidato.pico)) {
+                        this.candidato = { pico, r, amp };
+                    }
+                }
+                this.umbral = this.npk + 0.25 * (this.spk - this.npk);
             }
-            this.umbral = this.npk + 0.25 * (this.spk - this.npk);
         }
 
+        if (this.n < this.calentamiento) this.sumaCalentamiento = (this.sumaCalentamiento || 0) + integrada;
         if (this.n === this.calentamiento) {
+            // Como en Pan-Tompkins: señal = mitad del máximo; ruido = mitad del promedio de la señal integrada.
+            // Con un ECG el promedio es pequeño frente al pico del QRS; con solo ruido, los dos se parecen.
             this.spk = 0.5 * this.maxCalentamiento;
-            this.npk = 0.05 * this.maxCalentamiento;
+            this.npk = Math.max(0.05 * this.maxCalentamiento, 0.5 * (this.sumaCalentamiento / this.calentamiento));
             this.umbral = this.npk + 0.25 * (this.spk - this.npk);
         }
-        // Si pasan más de 2 s sin latidos (por ejemplo, la amplitud bajó mucho) los niveles se reajustan
-        if (this.n > this.calentamiento && this.n - this.ultimaDeteccion > 2 * this.fs) {
-            this.spk *= this.decaimiento;
-            this.npk *= this.decaimiento;
-            this.umbral = this.npk + 0.25 * (this.spk - this.npk);
+        if (this.n > this.calentamiento) {
+            const sinLatido = this.n - this.ultimaDeteccion;
+            // 7) búsqueda hacia atrás de un latido que quedó bajo el umbral
+            if (latido === null && this.rrPromedio > 0 && this.candidato && sinLatido > 1.66 * this.rrPromedio
+                && this.candidato.pico > 0.5 * this.umbral) {
+                const c = this.candidato;
+                latido = this.registrar(c.r, c.pico, c.amp, 0.25);
+                this.umbral = this.npk + 0.25 * (this.spk - this.npk);
+            }
+            // Si pasan más de 2 s sin latidos (por ejemplo, la amplitud bajó mucho) los niveles se reajustan
+            if (sinLatido > 2 * this.fs) {
+                this.spk *= this.decaimiento;
+                this.npk *= this.decaimiento;
+                this.umbral = this.npk + 0.25 * (this.spk - this.npk);
+            }
         }
 
         this.i2 = this.i1;
@@ -141,6 +196,12 @@ class QRSDetector {
         this.n++;
         return latido;
     }
+}
+
+/** Mediana de una lista (para listas pares devuelve el valor central superior). */
+function mediana(lista) {
+    const orden = [...lista].sort((a, b) => a - b);
+    return orden[Math.floor(orden.length / 2)];
 }
 
 class SignalProcessor {
@@ -166,7 +227,10 @@ class SignalProcessor {
         this.qrs = new QRSDetector(this.fs);
         this.ultimoLatidoIdx = null;
         this.intervalosRR = [];
-        this.detectedBPM = null;      // null hasta que se midan al menos dos intervalos RR
+        this.detectedBPM = null;      // null hasta tener 4 intervalos RR coherentes
+        this.ultimoValido = -Infinity;
+        // 'calibrando' | 'buena' | 'ruido' (señal/ruido baja) | 'irregular' (RR dispersos) | 'sin-senal' (no hay latidos)
+        this.calidad = 'calibrando';
     }
 
     processSample(sample, currentTime) {
@@ -231,26 +295,51 @@ class SignalProcessor {
         if (this.qrs.fs !== this.fs) this.resetDetector();   // cambió la frecuencia de muestreo
 
         const idx = this.qrs.process(sample);
-        if (idx === null) return;
+        if (idx !== null) this.registrarLatido(idx);
 
-        if (this.ultimoLatidoIdx !== null) {
-            const rr = (idx - this.ultimoLatidoIdx) / this.fs;   // intervalo RR en segundos
-            if (rr >= 0.27 && rr <= 2.0) {                        // 30–220 lpm
-                this.intervalosRR.push(rr);
-                if (this.intervalosRR.length > 5) this.intervalosRR.shift();
-                if (this.intervalosRR.length >= 2) {
-                    // La mediana de los últimos RR descarta un latido perdido o uno falso
-                    const orden = [...this.intervalosRR].sort((a, b) => a - b);
-                    const mediana = orden[Math.floor(orden.length / 2)];
-                    this.detectedBPM = Math.round(60 / mediana);  // BPM = 60 / RR
-                }
-            }
+        // 3 s sin latidos: no hay señal cardíaca (electrodos sueltos o sin contacto)
+        const ahora = this.qrs.n;
+        if (this.ultimoLatidoIdx !== null && ahora - this.ultimoLatidoIdx > 3 * this.fs && this.calidad !== 'sin-senal') {
+            this.intervalosRR = [];
+            this.detectedBPM = null;
+            this.calidad = 'sin-senal';
         }
+    }
+
+    registrarLatido(idx) {
+        if (this.ultimoLatidoIdx === null) { this.ultimoLatidoIdx = idx; return; }
+        const rr = (idx - this.ultimoLatidoIdx) / this.fs;   // intervalo RR en segundos
+        // Menos de 300 ms (más de 200 lpm) no es un latido real en reposo: suele ser la onda T,
+        // un movimiento o ruido. Se descarta y se sigue midiendo desde el último latido válido.
+        if (rr < 0.3) return;
         this.ultimoLatidoIdx = idx;
+        if (rr > 2.0) { this.intervalosRR = []; return; }   // pausa o pérdida de señal: se empieza de nuevo
+        this.intervalosRR.push(rr);
+        if (this.intervalosRR.length > 8) this.intervalosRR.shift();
+        if (this.intervalosRR.length < 4) { this.calidad = 'calibrando'; return; }
+
+        // BPM = 60 / RR con la mediana de los últimos 8 intervalos: un latido falso o perdido no la mueve.
+        // Solo se muestra si la señal es confiable:
+        //   · relación señal/ruido: el nivel de los QRS (SPK) debe ser ≥ 3 veces el del ruido (NPK).
+        //     Con un ECG real es de 8 a 30; sin electrodos (solo ruido) ronda 2.
+        //   · ritmo coherente: al menos 3 de cada 4 intervalos RR (6 de 8) a ±15 % de la mediana.
+        //     Un latido real pasa de sobra; el ruido muscular o de movimiento mete RR al azar y no.
+        // Así el ruido no produce BPM inventados (antes, sin electrodos, salían 150–200 lpm).
+        const med = mediana(this.intervalosRR);
+        const coherentes = this.intervalosRR.filter((v) => Math.abs(v - med) <= 0.15 * med).length;
+        const senalRuido = this.qrs.spk / Math.max(1e-12, this.qrs.npk);
+        if (senalRuido >= 3 && coherentes * 4 >= this.intervalosRR.length * 3) {
+            this.detectedBPM = Math.round(60 / med);
+            this.calidad = 'buena';
+            this.ultimoValido = idx;
+        } else {
+            this.calidad = senalRuido < 3 ? 'ruido' : 'irregular';
+            if (idx - this.ultimoValido > 3 * this.fs) this.detectedBPM = null;   // conserva el último valor 3 s
+        }
     }
 }
 
 // Permite probar estas clases con Node.js (npm test); en el navegador no hace nada
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { Biquad, QRSDetector, SignalProcessor };
+    module.exports = { Biquad, QRSDetector, SignalProcessor, mediana };
 }

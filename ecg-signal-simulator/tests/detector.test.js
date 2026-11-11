@@ -135,3 +135,69 @@ test('filtro pasa-bajas 40 Hz: ganancia de −3 dB (0.707) en la frecuencia de c
     assert.ok(ganancia(5, { lpEnabled: true }) > 0.98);
     assert.ok(ganancia(100, { lpEnabled: true }) < 0.5);
 });
+
+// ---------- Señales tipo AD8232 (casos que antes daban ~200 lpm) ----------
+/** ECG con T configurable, ruido gaussiano, red de 60 Hz, deriva y ráfagas musculares; semilla fija. */
+function ecgAD8232({ bpm = 75, T = 0.3, ruido = 0.03, red = 0.1, emg = 0, soloRuido = false, segundos = 30, semilla = 7 }) {
+    let s = semilla >>> 0;
+    const azar = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const gauss = () => { let u = azar(); while (u === 0) u = azar(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * azar()); };
+    const ondas = [[0.15, -0.18, 0.025], [-0.12, -0.03, 0.01], [1, 0, 0.012], [-0.25, 0.03, 0.012], [T, 0.28, 0.045]];
+    const latidos = [];
+    for (let t = 0.3; t < segundos + 1; t += (60 / bpm) * (1 + 0.03 * gauss())) latidos.push(t);
+    const x = [];
+    let rafaga = 0;
+    for (let i = 0; i < segundos * FS; i++) {
+        const t = i / FS;
+        let v = 0;
+        if (!soloRuido) {
+            for (const L of latidos) {
+                const d0 = t - L;
+                if (d0 < -0.4 || d0 > 0.6) continue;
+                for (const [a, c, sg] of ondas) v += a * Math.exp(-((d0 - c) ** 2) / (2 * sg * sg));
+            }
+        }
+        v += ruido * gauss() + red * Math.sin(2 * Math.PI * 60 * t) + 0.2 * Math.sin(2 * Math.PI * 0.2 * t);
+        if (emg) { if (azar() < 0.002) rafaga = Math.round(0.6 * FS); if (rafaga > 0) { v += emg * gauss(); rafaga--; } }
+        x.push(v);
+    }
+    return x;
+}
+
+/** Procesa la señal y devuelve los BPM mostrados cada segundo (después de 8 s) y la calidad final. */
+function lecturas(x) {
+    const proc = new SignalProcessor(FS);
+    const bpm = [];
+    x.forEach((v, n) => { proc.processSample(v, n / FS); if (n > 8 * FS && n % FS === 0) bpm.push(proc.detectedBPM); });
+    return { bpm, calidad: proc.calidad };
+}
+
+test('onda T alta (0.8–1.0 mV): no se cuenta como latido, el BPM no se duplica', () => {
+    for (const [bpm, T] of [[75, 0.8], [90, 1.0], [100, 0.7]]) {
+        const { bpm: medidos } = lecturas(ecgAD8232({ bpm, T }));
+        for (const m of medidos) assert.ok(m !== null && Math.abs(m - bpm) <= 3, `real ${bpm} con T=${T} → ${m}`);
+    }
+});
+
+test('sin electrodos (solo ruido y red eléctrica) no inventa una frecuencia cardíaca', () => {
+    for (const semilla of [1, 2, 3]) {
+        const { bpm, calidad } = lecturas(ecgAD8232({ soloRuido: true, ruido: 0.3, red: 0.6, semilla }));
+        assert.ok(bpm.every((b) => b === null), `semilla ${semilla}: mostró ${bpm.filter((b) => b !== null)}`);
+        assert.ok(['ruido', 'irregular', 'sin-senal', 'calibrando'].includes(calidad), calidad);
+    }
+});
+
+test('con ráfagas de ruido muscular nunca muestra un BPM equivocado (a lo sumo "--")', () => {
+    const { bpm } = lecturas(ecgAD8232({ bpm: 80, T: 0.5, emg: 0.35 }));
+    const mostrados = bpm.filter((b) => b !== null);
+    assert.ok(mostrados.length > 0, 'debería medir en los tramos sin ruido');
+    for (const b of mostrados) assert.ok(Math.abs(b - 80) <= 4, `mostró ${b} lpm con 80 reales`);
+});
+
+test('si la señal desaparece 3 s, el BPM vuelve a "--" con calidad "sin-senal"', () => {
+    const x = ecgAD8232({ bpm: 70, segundos: 15 }).concat(new Array(5 * FS).fill(0));
+    const proc = new SignalProcessor(FS);
+    x.forEach((v, n) => proc.processSample(v, n / FS));
+    assert.equal(proc.detectedBPM, null);
+    assert.equal(proc.calidad, 'sin-senal');
+});

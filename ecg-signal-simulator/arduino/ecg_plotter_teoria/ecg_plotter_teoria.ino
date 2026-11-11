@@ -1,7 +1,7 @@
 /*
  * ============================================================
  *  ECG en tiempo real: Serial Plotter del Arduino IDE  +  página del proyecto
- *  Arduino Uno / Nano + módulo AD8232
+ *  Arduino Uno / Nano + módulo AD8232                         versión 3.0
  *  Proyecto educativo de Teoría de Señales (Universidad de Manizales)
  *  NO es un dispositivo médico ni sirve para diagnóstico.
  * ============================================================
@@ -14,9 +14,9 @@
  *    MODO WEB  -> la página del proyecto (npm start o la versión publicada en Vercel).
  *      Al conectarse, la página envía "WEB" y el sketch pasa al protocolo del proyecto
  *      (el mismo que entiende el servidor), a 250 muestras por segundo:
- *        I,ECG_PLOTTER_TEORIA,2.0,fs=250   anuncio
+ *        I,ECG_PLOTTER_TEORIA,3.0,fs=250   anuncio
  *        S,<adc>                           muestra (0-1023; la página aplica sus filtros)
- *        H,<bpm>                           frecuencia cardíaca medida aquí
+ *        H,<bpm>                           frecuencia cardíaca medida aquí (H,0 = sin medición válida)
  *        R,<rr ms>,<QRS en centésimas de mV>,<1 regular | 0 irregular>
  *        D,<derivación>                    derivación que se está midiendo
  *        L,<0|1>                           electrodo suelto (si USAR_LEADS_OFF = true)
@@ -37,7 +37,25 @@
  *    LED opcional en D8 (lo controla la página) y en D9 (parpadea con cada latido),
  *    cada uno con una resistencia de 220 ohm a GND.
  *    Los 3 electrodos (RA, LA, RL) deben estar pegados a la piel.
- *    Sin electrodos el módulo solo capta ruido de la red eléctrica.
+ *    Sin electrodos el módulo solo capta ruido de la red eléctrica: el sketch lo reconoce
+ *    y NO muestra una frecuencia cardíaca inventada (FC = 0).
+ *
+ *  CÓMO SE CALCULA LA FRECUENCIA CARDÍACA (algoritmo de Pan-Tompkins, 1985)
+ *    1. Pasa-banda 5-15 Hz: deja la energía del complejo QRS y atenúa las ondas P y T,
+ *       la deriva de la línea base, la red de 60 Hz y el ruido muscular.
+ *    2. Derivada, elevación al cuadrado e integración en una ventana de 150 ms:
+ *       cada QRS se convierte en un pulso.
+ *    3. Umbral adaptativo entre el nivel de los QRS y el nivel del ruido.
+ *    4. Período refractario de 200 ms y discriminación de la onda T: un pico que aparece
+ *       entre 200 y 360 ms después del QRS con menos de la mitad de su PENDIENTE máxima es la
+ *       onda T (puede ser alta, pero nunca tan empinada como el QRS).
+ *       (La versión anterior la contaba como latido y por eso marcaba ~200 lpm.)
+ *    5. Búsqueda hacia atrás: si pasa 1.66 RR sin latido, se recupera el QRS que quedó bajo el umbral.
+ *    6. FC = 60 / RR con la MEDIANA de los últimos 8 intervalos RR, y solo si la señal es confiable:
+ *         - relación señal/ruido >= 3 (con ECG real es 8-30; sin electrodos, ~2);
+ *         - intervalos coherentes (desviación mediana <= 12 % del RR);
+ *         - RR entre 300 y 2000 ms (200 a 30 lpm).
+ *       Si no se cumple, FC = 0 y el informe de texto dice por qué (ruido, ritmo irregular, sin latidos).
  *
  *  CÓMO VER LA GRÁFICA EN EL ARDUINO IDE
  *    1. Herramientas > Placa: Arduino Uno.
@@ -46,10 +64,12 @@
  *    4. Herramientas > Serial Plotter (Ctrl+Shift+L) y elige 115200 baud en el menú
  *       de abajo a la derecha (el IDE lo recuerda). La página del proyecto también usa 115200.
  *    Tip: activa "Interpolate" en el Plotter para suavizar la línea.
+ *    Quédate quieto y relajado: hablar o mover los brazos mete ruido muscular.
+ *    La FC aparece después de unos 5 segundos (2 s de calibración + 4 latidos).
  *
  *  QUÉ MUESTRA LA GRÁFICA DEL PLOTTER
  *    <derivación>   la onda ECG centrada en 0 (la leyenda dice cuál es: I, II, V2...)
- *    FC             frecuencia cardíaca en latidos por minuto (lee el valor en el eje)
+ *    FC             frecuencia cardíaca en latidos por minuto (0 = todavía no hay medición confiable)
  *    Cero           línea de referencia
  *    SUELTO         aparece en lugar de la derivación si un electrodo se despega
  *    La amplitud de la onda se lee en el eje: unas 225 unidades = 1 mV
@@ -67,13 +87,9 @@
  *       V1 V2 V3 V4 V5 V6               (precordiales)
  *    Es solo una etiqueta: el sketch no sabe dónde pusiste los electrodos.
  *
- *  QUÉ CALCULA CON LOS LATIDOS
- *    FC (lpm), intervalo RR (ms), amplitud del complejo QRS (mV aprox.),
- *    si el ritmo es regular o irregular y si la FC es baja (< 60),
- *    normal (60 a 100) o alta (> 100) en reposo. Funciona con QRS positivo
- *    o negativo (por ejemplo en AVR y V1). Para verlo escrito:
+ *  INFORMES DE TEXTO
  *       M         modo texto: abre el Serial Monitor (misma velocidad) y verás
- *                 un informe por segundo. La gráfica se detiene.
+ *                 un informe por segundo (FC, RR, QRS, ritmo y calidad de la señal).
  *       P         vuelve a la gráfica.
  *       RESUMEN   tabla con la última medición de cada derivación.
  *       AYUDA     lista de comandos.
@@ -88,19 +104,8 @@
  *      2. Elige la MISMA velocidad en el menú del Plotter. Al reabrir el puerto el Uno
  *         se reinicia solo (2 o 3 s sin gráfica) y dibuja con la velocidad nueva.
  *    Escribir 0 vuelve a 115200 (la que usa la página del proyecto).
- *      >= 4800 baud -> onda a 40 puntos/s (con FC desde 9600)
- *         2400 baud -> onda a 25 puntos/s
- *         1200 baud -> 10 puntos/s (latidos sin detalle)
- *          600 baud ->  8 puntos/s (picos de los latidos, sin forma)
- *          300 baud ->  4 puntos/s (zigzag: marca el ritmo, no parece ECG)
  *
- *  QUÉ HACE PARA QUE LA GRÁFICA SE VEA LIMPIA
- *    - Muestrea a 200 Hz (250 Hz en modo web) y promedia 4 lecturas por muestra.
- *    - Filtro notch de 60 Hz (red eléctrica) y suavizado de 40 Hz.
- *    - Quita la componente continua: la onda queda centrada en 0.
- *    - De cada tramo conserva el valor más alto: el pico R no se pierde.
- *
- *  PRUEBA SIN SENSOR: pon MODO_DEMO = true (ECG sintético de BPM_DEMO lpm).
+ *  PRUEBA SIN SENSOR: pon MODO_DEMO = true (ECG sintético de BPM_DEMO lpm, con onda T alta).
  */
 
 #include <EEPROM.h>
@@ -135,7 +140,7 @@ const uint8_t N_BAUDIOS = sizeof(BAUDIOS_VALIDOS) / sizeof(BAUDIOS_VALIDOS[0]);
 const unsigned int DIVISORES[] = {40, 25, 20, 10, 8, 5, 4, 2, 1};   // todos dividen a 200
 const uint8_t N_DIVISORES = sizeof(DIVISORES) / sizeof(DIVISORES[0]);
 const int     DIR_EEPROM   = 0;          // dirección 0: marca; dirección 1: velocidad elegida
-const uint8_t MARCA_EEPROM = 0xED;       // distinta de la versión anterior (que guardaba 9600)
+const uint8_t MARCA_EEPROM = 0xED;
 
 // ---------- Derivaciones ----------
 const uint8_t N_DERIV = 12;
@@ -152,16 +157,13 @@ const float RADIO_NOTCH = 0.95f;                       // ancho del notch (más 
 const float TAU_BASE_S  = 1.5f;                        // constante de tiempo de la línea base (s)
 const float DOS_PI      = 6.2831853f;
 
-// ---------- Estado: muestreo y filtros (dependen de fs) ----------
+// ---------- Estado: muestreo y filtros de la señal (dependen de fs) ----------
 unsigned int  fs = FS_GRAFICA;
 unsigned int  fsWeb = FS_WEB_INICIAL;
 unsigned long periodoUs = 1000000UL / FS_GRAFICA;
-unsigned int  msPorMuestra = 1000U / FS_GRAFICA;
 unsigned int  nBase = (unsigned int)(FS_GRAFICA * TAU_BASE_S);  // al inicio la línea base es un promedio acumulado
 unsigned int  calentamiento = FS_GRAFICA / 2;                   // 0,5 s sin dibujar mientras se estabiliza
 float notchC = 0, notchK = 1, alfaBase = 0, alfaSuave = 1;
-float escalaPendiente = 1.0f;     // la pendiente se mide siempre "en 10 ms", sea cual sea fs
-float decaeReferencia = 0.9998f;
 
 // ---------- Estado: puerto serial ----------
 enum Formato : uint8_t { SIMPLE, ETIQUETADO, RICO };
@@ -189,30 +191,90 @@ unsigned int muestrasBase = 0;                         // muestras usadas para c
 float mejor = 0;                                       // valor de mayor amplitud del tramo actual
 unsigned int cuentaTramo = 0, cuentaInicio = 0;
 float tDemo = 0;
-
-// ---------- Estado: análisis de latidos ----------
-const unsigned int REFRACTARIO_MS = 250;               // no hay latidos a menos de 250 ms (240 lpm)
-const unsigned int VENTANA_QRS_MS = 100;               // tiempo para encontrar el máximo del QRS
-const unsigned int PERDIDA_MS     = 2500;              // sin latidos durante 2,5 s: se pierde la medición
-const float PENDIENTE_MIN = 25.0f;                     // pendiente mínima (cuentas en 10 ms) para considerar un QRS
-const float AMPLITUD_MIN  = 30.0f;                     // amplitud mínima de un QRS (cuentas)
-uint8_t derivacion = 0;                                // derivación que se está midiendo (índice en NOMBRES)
-unsigned long tMs = 0;                                 // tiempo de la señal en ms
-float valorHace1 = 0, valorHace2 = 0;
-float referenciaPendiente = 0;                         // pendiente típica de los QRS recientes
-bool  enVentana = false;
-unsigned long finVentana = 0, tMaximo = 0, tUltimoLatido = 0;
-float maxAmplitud = 0, maxPendiente = 0;
-bool  hayLatidoPrevio = false;
-unsigned int rrMs[4];
-uint8_t nRR = 0, idxRR = 0;
-unsigned int bpmActual = 0, rrActual = 0;
-float ampMedia = 0;                                    // amplitud media del QRS en cuentas
-bool  ritmoRegular = true;
-unsigned int latidosActuales = 0;
+bool  electrodoSuelto = false;
 bool  modoTexto = false;
 unsigned int cuentaReporte = 0;
-bool  electrodoSuelto = false;
+uint8_t derivacion = 0;                                // derivación que se está midiendo (índice en NOMBRES)
+
+// ============================================================
+//  DETECTOR DE LATIDOS (Pan-Tompkins)
+//  Corre a fsDet = fs (125, 200 o 250 Hz); con fs = 500 promedia pares de muestras
+//  y corre a 250 Hz, así los búferes caben en los 2 KB de RAM del Uno.
+// ============================================================
+const uint8_t MAX_VENTANA  = 38;   // 150 ms a 250 Hz (integración)
+const uint8_t MAX_BUSQUEDA = 50;   // 200 ms a 250 Hz (ubicación y pendiente del QRS)
+const uint8_t N_RR = 8;            // intervalos RR para la mediana
+
+enum Calidad : uint8_t { CALIBRANDO, BUENA, RUIDO, IRREGULAR, SIN_SENAL };
+
+/** Filtro IIR de 2.º orden (Butterworth, Q = 1/raíz de 2): pasa-altas o pasa-bajas. */
+struct Biquad {
+  float b0, b1, b2, a1, a2, x1, x2, y1, y2;
+  void disenar(float f0, float fsd, bool pasaAltas) {
+    const float w0 = DOS_PI * f0 / fsd, c = cosf(w0), alfa = sinf(w0) / (2.0f * 0.70710678f), a0 = 1.0f + alfa;
+    if (pasaAltas) { b0 = (1.0f + c) / 2.0f; b1 = -(1.0f + c); }
+    else           { b0 = (1.0f - c) / 2.0f; b1 = 1.0f - c; }
+    b2 = b0;
+    b0 /= a0; b1 /= a0; b2 /= a0;
+    a1 = -2.0f * c / a0;
+    a2 = (1.0f - alfa) / a0;
+    x1 = x2 = y1 = y2 = 0;
+  }
+  void iniciar(float x) {                     // régimen permanente para una entrada constante (sin transitorio)
+    const float g = (b0 + b1 + b2) / (1.0f + a1 + a2);
+    x1 = x2 = x; y1 = y2 = g * x;
+  }
+  float procesar(float x) {
+    const float y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = x; y2 = y1; y1 = y;
+    return y;
+  }
+};
+
+// Configuración del detector (se recalcula al cambiar fs)
+unsigned int fsDet = FS_GRAFICA, msDet = 5;
+uint8_t ventanaLargo = 30, busquedaLargo = 40;
+unsigned int refractarioDet, ventanaTDet, calibracionDet;
+float decaeNiveles = 1.0f;
+
+// Estado del detector
+Biquad pasaAltas5, pasaBajas15;
+float mwi[MAX_VENTANA];                 // derivada al cuadrado (ventana de integración)
+float pendienteAbs[MAX_BUSQUEDA];       // |derivada del pasa-banda| de los últimos 200 ms
+int16_t valorAbs[MAX_BUSQUEDA];         // |señal| de los últimos 200 ms (para medir el QRS en mV)
+float mwiSuma = 0;
+uint8_t mwiPos = 0;
+float h0 = 0, h1 = 0, h2 = 0, h3 = 0;   // pasa-banda en n-1 … n-4 (derivada de 5 puntos)
+float int1 = 0, int2 = 0;               // señal integrada en n-1 y n-2
+float spk = 0, npk = 0, umbral = 1e30f; // niveles de QRS, de ruido y umbral
+float maxCalibracion = 0, sumaCalibracion = 0;
+unsigned long nDet = 0;                 // muestras procesadas por el detector
+bool iniciadoDet = false;
+bool hayQRS = false;
+unsigned long ultimoQRS = 0;            // muestra del último pico R aceptado
+float ampQRS = 0;                       // pendiente máxima típica de los QRS recientes
+unsigned int rrDet[N_RR];               // RR del detector (en muestras), para la búsqueda hacia atrás
+uint8_t nRrDet = 0;
+float rrPromDet = 0;
+bool hayCandidato = false;              // mejor pico bajo el umbral desde el último QRS
+float candPico = 0, candAmp = 0;
+unsigned long candR = 0;
+int16_t candValor = 0;
+float acumDecimar = 0;                  // para fs = 500: promedio de pares de muestras
+bool mitadDecimar = false;
+
+// Estado de la frecuencia cardíaca
+unsigned int rrHist[N_RR];              // últimos RR válidos en ms (orden cronológico)
+uint8_t nHist = 0;
+bool hayRef = false;
+unsigned long refLatido = 0;            // muestra del último latido usado para medir RR
+bool hayValido = false;
+unsigned long ultimoValido = 0;         // muestra del último cálculo de FC confiable
+Calidad calidad = CALIBRANDO;
+unsigned int bpmActual = 0, rrActual = 0;   // 0 = sin medición confiable
+float ampMedia = 0;                     // amplitud media del QRS en cuentas
+bool  ritmoRegular = true;
+unsigned int latidosActuales = 0;
 // Última medición de cada derivación (para RESUMEN)
 unsigned int bpmDeriv[N_DERIV], ampDeriv[N_DERIV], latidosDeriv[N_DERIV];   // amp en centésimas de mV
 
@@ -228,7 +290,7 @@ float ecgDemo(float t) {
        + onda(fase, -0.12f, 0.285f, 0.010f)               // Q
        + onda(fase, 1.00f, 0.300f, 0.010f)                // R
        + onda(fase, -0.22f, 0.318f, 0.012f)               // S
-       + onda(fase, 0.30f, 0.520f, 0.040f);               // T
+       + onda(fase, 0.60f, 0.560f, 0.045f);               // T alta: comprueba que no se cuente como latido
 }
 
 // ---------- Velocidad del puerto serial ----------
@@ -289,16 +351,70 @@ void cambiarVelocidad(unsigned long nueva) {
   proximaMuestraUs = micros();
 }
 
-// ---------- Análisis de latidos ----------
-void reiniciarAnalisis() {
-  enVentana = false;
-  hayLatidoPrevio = false;
-  nRR = 0; idxRR = 0;
-  bpmActual = 0; rrActual = 0;
-  referenciaPendiente = 0;
+// ============================================================
+//  Detector de latidos y frecuencia cardíaca
+// ============================================================
+
+/** Mediana de n valores (para n par, el central superior). */
+unsigned int mediana(const unsigned int* v, uint8_t n) {
+  unsigned int orden[N_RR];
+  for (uint8_t i = 0; i < n; i++) {                        // ordenamiento por inserción (n <= 8)
+    unsigned int x = v[i];
+    int8_t j = i - 1;
+    while (j >= 0 && orden[j] > x) { orden[j + 1] = orden[j]; j--; }
+    orden[j + 1] = x;
+  }
+  return orden[n / 2];
+}
+
+void reiniciarFrecuencia() {
+  nHist = 0;
+  hayRef = false;
+  hayValido = false;
+  calidad = CALIBRANDO;
+  bpmActual = 0;
+  rrActual = 0;
   ampMedia = 0;
   ritmoRegular = true;
   latidosActuales = 0;
+}
+
+void reiniciarDetector() {
+  pasaAltas5.disenar(5.0f, fsDet, true);
+  pasaBajas15.disenar(15.0f, fsDet, false);
+  for (uint8_t i = 0; i < MAX_VENTANA; i++) mwi[i] = 0;
+  for (uint8_t i = 0; i < MAX_BUSQUEDA; i++) { pendienteAbs[i] = 0; valorAbs[i] = 0; }
+  mwiSuma = 0; mwiPos = 0;
+  h0 = h1 = h2 = h3 = 0;
+  int1 = int2 = 0;
+  spk = npk = 0; umbral = 1e30f;
+  maxCalibracion = sumaCalibracion = 0;
+  nDet = 0;
+  iniciadoDet = false;
+  hayQRS = false; ultimoQRS = 0; ampQRS = 0;
+  nRrDet = 0; rrPromDet = 0;
+  hayCandidato = false;
+  mitadDecimar = false;
+}
+
+/** Deja todo listo para medir de nuevo (al cambiar de derivación, de fs o si se suelta un electrodo). */
+void reiniciarAnalisis() {
+  reiniciarDetector();
+  reiniciarFrecuencia();
+}
+
+void configurarDetector() {
+  fsDet = fs > 250 ? fs / 2 : fs;
+  msDet = 1000U / fsDet;                                   // 125 -> 8 ms, 200 -> 5 ms, 250 -> 4 ms
+  ventanaLargo  = (uint8_t)(0.15f * fsDet + 0.5f);         // 150 ms
+  busquedaLargo = (uint8_t)(0.20f * fsDet + 0.5f);         // 200 ms
+  if (ventanaLargo > MAX_VENTANA) ventanaLargo = MAX_VENTANA;
+  if (busquedaLargo > MAX_BUSQUEDA) busquedaLargo = MAX_BUSQUEDA;
+  refractarioDet = (unsigned int)(0.20f * fsDet + 0.5f);   // 200 ms
+  ventanaTDet    = (unsigned int)(0.36f * fsDet + 0.5f);   // 360 ms
+  calibracionDet = 2 * fsDet;                              // 2 s
+  decaeNiveles   = powf(0.6f, 1.0f / fsDet);               // los niveles bajan 40 % por segundo sin latidos
+  reiniciarAnalisis();
 }
 
 void cambiarDerivacion(uint8_t i) {
@@ -312,11 +428,220 @@ int8_t buscarDerivacion(const char* nombre) {
   return -1;
 }
 
+void enviarLatidoWeb() {
+  Serial.print(F("H,"));
+  Serial.println(bpmActual);
+  Serial.print(F("R,"));
+  Serial.print(rrActual);
+  Serial.print(',');
+  Serial.print((unsigned int)(ampMedia / CUENTAS_POR_MV * 100.0f + 0.5f));
+  Serial.print(',');
+  Serial.println(ritmoRegular ? 1 : 0);
+}
+
+/** Retira la FC mostrada (H,0 en modo web) cuando deja de ser confiable. */
+void anularFrecuencia() {
+  if (bpmActual == 0) return;
+  bpmActual = 0;
+  if (modoWeb) Serial.println(F("H,0"));
+}
+
+/** Un QRS aceptado por el detector: actualiza niveles y el RR promedio del detector. */
+void aceptarQRS(unsigned long r, float pico, float amp, float peso) {
+  spk = peso * pico + (1.0f - peso) * spk;
+  if (hayQRS) {
+    const unsigned long rr = r - ultimoQRS;
+    if (nRrDet < N_RR) nRrDet++;
+    else for (uint8_t i = 1; i < N_RR; i++) rrDet[i - 1] = rrDet[i];
+    rrDet[nRrDet - 1] = rr > 65535UL ? 65535U : (unsigned int)rr;
+    unsigned long suma = 0;
+    for (uint8_t i = 0; i < nRrDet; i++) suma += rrDet[i];
+    rrPromDet = (float)suma / nRrDet;
+  }
+  ultimoQRS = r;
+  hayQRS = true;
+  ampQRS = ampQRS > 0 ? 0.7f * ampQRS + 0.3f * amp : amp;
+  hayCandidato = false;
+  digitalWrite(PIN_LED_LATIDO, HIGH);                      // LED de latido (D9)
+  apagarLedLatidoMs = millis() + 40;
+}
+
+/** Un latido para la FC: RR, mediana, calidad de la señal y FC. */
+void registrarLatido(unsigned long r, int16_t valorMax) {
+  if (!hayRef) { hayRef = true; refLatido = r; return; }
+  if (r <= refLatido) return;
+  const unsigned long rrMs = (r - refLatido) * msDet;
+  // Menos de 300 ms (más de 200 lpm) no es un latido real en reposo: suele ser la onda T,
+  // un movimiento o ruido. Se descarta y se sigue midiendo desde el último latido válido.
+  if (rrMs < 300UL) return;
+  refLatido = r;
+  if (rrMs > 2000UL) { nHist = 0; return; }                // pausa o pérdida de señal: se empieza de nuevo
+
+  if (nHist < N_RR) nHist++;
+  else for (uint8_t i = 1; i < N_RR; i++) rrHist[i - 1] = rrHist[i];
+  rrHist[nHist - 1] = (unsigned int)rrMs;
+  rrActual = (unsigned int)rrMs;
+  if (latidosActuales < 65535) latidosActuales++;
+  ampMedia = (ampMedia == 0) ? valorMax : 0.7f * ampMedia + 0.3f * valorMax;
+  if (nHist < 4) { calidad = CALIBRANDO; return; }
+
+  // Ritmo coherente: al menos 3 de cada 4 intervalos (6 de 8) a ±15 % de la mediana.
+  // Un latido real pasa de sobra; el ruido muscular o de movimiento mete RR al azar y no.
+  const unsigned int med = mediana(rrHist, nHist);
+  const unsigned int tolerancia = (unsigned int)(0.15f * med);
+  uint8_t coherentes = 0;
+  unsigned int menor = 65535, mayor = 0;
+  for (uint8_t i = 0; i < nHist; i++) {
+    const unsigned int desv = rrHist[i] > med ? rrHist[i] - med : med - rrHist[i];
+    if (desv <= tolerancia) coherentes++;
+    if (rrHist[i] < menor) menor = rrHist[i];
+    if (rrHist[i] > mayor) mayor = rrHist[i];
+  }
+  const bool senalConfiable = spk >= 3.0f * npk;           // relación señal/ruido >= 3
+
+  if (senalConfiable && coherentes * 4 >= nHist * 3) {
+    bpmActual = (unsigned int)((60000UL + med / 2) / med);   // FC = 60 / RR (mediana)
+    calidad = BUENA;
+    hayValido = true;
+    ultimoValido = r;
+    ritmoRegular = (float)(mayor - menor) <= 0.15f * med;
+    bpmDeriv[derivacion] = bpmActual;
+    ampDeriv[derivacion] = (unsigned int)(ampMedia / CUENTAS_POR_MV * 100.0f + 0.5f);
+    latidosDeriv[derivacion] = latidosActuales;
+    if (modoWeb) enviarLatidoWeb();
+  } else {
+    calidad = senalConfiable ? IRREGULAR : RUIDO;
+    // conserva la última FC confiable durante 3 s (un artefacto aislado no la borra)
+    if (!hayValido || r - ultimoValido > 3UL * fsDet) anularFrecuencia();
+  }
+}
+
+/** Una muestra para el detector (a fsDet). x = señal filtrada y centrada en 0 (cuentas). */
+void detectarMuestra(float x) {
+  if (!iniciadoDet) {
+    pasaAltas5.iniciar(x);
+    pasaBajas15.iniciar(0);
+    iniciadoDet = true;
+  }
+  // 1) pasa-banda 5-15 Hz
+  const float b = pasaBajas15.procesar(pasaAltas5.procesar(x));
+  // 2) derivada: y[n] = (2x[n] + x[n-1] - x[n-3] - 2x[n-4]) / 8
+  const float d = (2.0f * b + h0 - h2 - 2.0f * h3) / 8.0f;
+  h3 = h2; h2 = h1; h1 = h0; h0 = b;
+  const uint8_t k = nDet % busquedaLargo;
+  pendienteAbs[k] = fabsf(d);
+  const float ax = fabsf(x);
+  valorAbs[k] = ax > 32767.0f ? 32767 : (int16_t)ax;
+  // 3) cuadrado y 4) integración en ventana móvil de 150 ms
+  const float cuadrado = d * d;
+  mwiSuma += cuadrado - mwi[mwiPos];
+  mwi[mwiPos] = cuadrado;
+  if (++mwiPos >= ventanaLargo) {
+    mwiPos = 0;
+    float s = 0;                                           // se recalcula la suma: evita que el redondeo se acumule
+    for (uint8_t i = 0; i < ventanaLargo; i++) s += mwi[i];
+    mwiSuma = s;
+  }
+  float integrada = mwiSuma / ventanaLargo;
+  if (integrada < 0) integrada = 0;
+
+  // 5) decisión: ¿la señal integrada tuvo un máximo local en la muestra anterior?
+  bool latido = false;
+  unsigned long rLatido = 0;
+  int16_t valorLatido = 0;
+  if (nDet >= 2 && int1 > int2 && int1 >= integrada) {
+    const float pico = int1;
+    if (nDet < calibracionDet) {
+      if (pico > maxCalibracion) maxCalibracion = pico;
+    } else {
+      // el latido se ubica en la pendiente máxima (flanco más empinado del QRS) de los 200 ms previos:
+      // da RR casi sin jitter, y esa pendiente es la que distingue el QRS de la onda T
+      unsigned long r = nDet - 1;
+      float amp = -1;
+      int16_t vmax = 0;
+      for (uint8_t j = 0; j < busquedaLargo; j++) {
+        const uint8_t i = (nDet - j) % busquedaLargo;
+        if (pendienteAbs[i] > amp) { amp = pendienteAbs[i]; r = nDet - j; }
+        if (valorAbs[i] > vmax) vmax = valorAbs[i];
+      }
+      const unsigned long dt = !hayQRS ? 0xFFFFFFFFUL : (r > ultimoQRS ? r - ultimoQRS : 0);
+      if (pico > umbral) {
+        if (dt <= refractarioDet) {
+          // mismo complejo QRS (o ruido pegado a él): se ignora
+        } else if (dt < ventanaTDet && amp < 0.5f * ampQRS) {
+          npk = 0.125f * pico + 0.875f * npk;              // 6) es la onda T, no un latido
+        } else {
+          aceptarQRS(r, pico, amp, 0.125f);
+          latido = true; rLatido = r; valorLatido = vmax;
+        }
+      } else {
+        npk = 0.125f * pico + 0.875f * npk;
+        if (dt > ventanaTDet && (!hayCandidato || pico > candPico)) {
+          hayCandidato = true; candPico = pico; candAmp = amp; candR = r; candValor = vmax;
+        }
+      }
+      umbral = npk + 0.25f * (spk - npk);
+    }
+  }
+
+  if (nDet < calibracionDet) sumaCalibracion += integrada;
+  if (nDet == calibracionDet) {
+    // señal = mitad del máximo; ruido = mitad del promedio de la integrada (con solo ruido se parecen)
+    spk = 0.5f * maxCalibracion;
+    npk = 0.5f * (sumaCalibracion / calibracionDet);
+    if (npk < 0.05f * maxCalibracion) npk = 0.05f * maxCalibracion;
+    umbral = npk + 0.25f * (spk - npk);
+  }
+  if (nDet > calibracionDet) {
+    const unsigned long sinLatido = hayQRS ? nDet - ultimoQRS : 0xFFFFFFFFUL;
+    // 7) búsqueda hacia atrás: pasó 1.66 RR sin latido → se acepta el mejor pico bajo el umbral
+    if (!latido && rrPromDet > 0 && hayCandidato && (float)sinLatido > 1.66f * rrPromDet && candPico > 0.5f * umbral) {
+      aceptarQRS(candR, candPico, candAmp, 0.25f);
+      latido = true; rLatido = candR; valorLatido = candValor;
+      umbral = npk + 0.25f * (spk - npk);
+    }
+    // más de 2 s sin latidos (la amplitud bajó): los niveles se reajustan
+    if (sinLatido > 2UL * fsDet) {
+      spk *= decaeNiveles;
+      npk *= decaeNiveles;
+      umbral = npk + 0.25f * (spk - npk);
+    }
+  }
+
+  int2 = int1;
+  int1 = integrada;
+  nDet++;
+
+  if (latido) registrarLatido(rLatido, valorLatido);
+  // 3 s sin latidos: no hay señal cardíaca (electrodos sueltos o sin contacto)
+  if (hayRef && nDet - refLatido > 3UL * fsDet && calidad != SIN_SENAL) {
+    nHist = 0;
+    calidad = SIN_SENAL;
+    anularFrecuencia();
+  }
+}
+
+/** Entrega cada muestra al detector; con fs = 500 promedia pares (el detector corre a 250 Hz). */
+void alimentarDetector(float valor) {
+  if (fs > 250) {
+    if (!mitadDecimar) { acumDecimar = valor; mitadDecimar = true; return; }
+    valor = 0.5f * (acumDecimar + valor);
+    mitadDecimar = false;
+  }
+  detectarMuestra(valor);
+}
+
+void actualizarLedLatido() {
+  if (apagarLedLatidoMs && (long)(millis() - apagarLedLatidoMs) >= 0) {
+    digitalWrite(PIN_LED_LATIDO, LOW);
+    apagarLedLatidoMs = 0;
+  }
+}
+
 // ---------- Frecuencia de muestreo: recalcula filtros y tiempos ----------
 void configurarMuestreo(unsigned int nuevaFs) {
   fs = nuevaFs;
   periodoUs = 1000000UL / fs;
-  msPorMuestra = 1000U / fs;                               // 125 -> 8, 200 -> 5, 250 -> 4, 500 -> 2
   // Notch de 60 Hz con ganancia 1 en continua
   notchC = cosf(DOS_PI * 60.0f / fs);
   notchK = (1.0f - 2.0f * RADIO_NOTCH * notchC + RADIO_NOTCH * RADIO_NOTCH) / (2.0f - 2.0f * notchC);
@@ -324,19 +649,17 @@ void configurarMuestreo(unsigned int nuevaFs) {
   alfaSuave = (SUAVIZAR_HZ > 0) ? 1.0f - expf(-DOS_PI * SUAVIZAR_HZ / fs) : 1.0f;
   nBase = (unsigned int)(fs * TAU_BASE_S);
   calentamiento = fs / 2;
-  escalaPendiente = 5.0f / msPorMuestra;                   // |x[n] - x[n-2]| llevado a "cuentas en 10 ms"
-  decaeReferencia = powf(0.9998f, (float)FS_GRAFICA / fs); // misma memoria (unos 25 s) a cualquier fs
   iniciado = false;
   cuentaInicio = 0;
   cuentaTramo = 0;
   mejor = 0;
-  reiniciarAnalisis();
+  configurarDetector();
   proximaMuestraUs = micros();
 }
 
 // ---------- Modo web (página del proyecto) ----------
 void anunciarWeb() {
-  Serial.print(F("I,ECG_PLOTTER_TEORIA,2.0,fs="));
+  Serial.print(F("I,ECG_PLOTTER_TEORIA,3.0,fs="));
   Serial.println(fs);
   Serial.print(F("D,"));
   Serial.println(NOMBRES[derivacion]);
@@ -358,17 +681,6 @@ void entrarModoGrafica() {
   configurarMuestreo(FS_GRAFICA);
 }
 
-void enviarLatidoWeb() {
-  Serial.print(F("H,"));
-  Serial.println(bpmActual);
-  Serial.print(F("R,"));
-  Serial.print(rrActual);
-  Serial.print(',');
-  Serial.print((unsigned int)(ampMedia / CUENTAS_POR_MV * 100.0f + 0.5f));
-  Serial.print(',');
-  Serial.println(ritmoRegular ? 1 : 0);
-}
-
 void salidaWeb(float x) {
   const unsigned long ahora = millis();
   if (USAR_LEADS_OFF && (electrodoSuelto != sueltoAvisado || (electrodoSuelto && ahora - ultimoAvisoSueltoMs > 2000))) {
@@ -382,87 +694,6 @@ void salidaWeb(float x) {
   Serial.println((int)(x + 0.5f));                          // muestra cruda: la página aplica sus filtros
 }
 
-// Se llama con cada muestra de la señal ya filtrada y centrada en 0.
-// Detecta el QRS por su pendiente (más rápida que la de las ondas P y T) y mide su amplitud
-// con el valor absoluto, así funciona con QRS positivo o negativo.
-void analizarLatidos(float valor) {
-  tMs += msPorMuestra;
-  const unsigned long t = tMs;
-  const float pendiente = fabsf(valor - valorHace2) * escalaPendiente;
-  const float absoluto = fabsf(valor);
-  valorHace2 = valorHace1;
-  valorHace1 = valor;
-
-  if (hayLatidoPrevio && t - tUltimoLatido > PERDIDA_MS) {      // se perdió la señal
-    reiniciarAnalisis();
-  }
-
-  referenciaPendiente *= decaeReferencia;                  // la referencia decae despacio (unos 25 s)
-  float umbral = 0.4f * referenciaPendiente;
-  if (umbral < PENDIENTE_MIN) umbral = PENDIENTE_MIN;
-
-  if (!enVentana) {
-    const bool pasoRefractario = !hayLatidoPrevio || (t - tUltimoLatido > REFRACTARIO_MS);
-    if (pendiente > umbral && pasoRefractario) {
-      enVentana = true;
-      finVentana = t + VENTANA_QRS_MS;
-      maxAmplitud = absoluto; tMaximo = t;
-      maxPendiente = pendiente;
-    }
-    return;
-  }
-
-  if (absoluto > maxAmplitud) { maxAmplitud = absoluto; tMaximo = t; }
-  if (pendiente > maxPendiente) maxPendiente = pendiente;
-  if (t < finVentana) return;
-
-  // Fin de la ventana: se confirma (o descarta) el latido
-  enVentana = false;
-  if (maxAmplitud < AMPLITUD_MIN) return;                  // demasiado pequeño: ruido
-  referenciaPendiente = (referenciaPendiente == 0) ? maxPendiente : 0.7f * referenciaPendiente + 0.3f * maxPendiente;
-  ampMedia = (ampMedia == 0) ? maxAmplitud : 0.7f * ampMedia + 0.3f * maxAmplitud;
-
-  digitalWrite(PIN_LED_LATIDO, HIGH);                      // LED de latido (D9)
-  apagarLedLatidoMs = millis() + 40;
-
-  if (hayLatidoPrevio) {
-    const unsigned long rr = tMaximo - tUltimoLatido;
-    if (rr >= 240 && rr <= 2000) {
-      rrMs[idxRR] = (unsigned int)rr;
-      idxRR = (idxRR + 1) % 4;
-      if (nRR < 4) nRR++;
-      rrActual = (unsigned int)rr;
-    }
-  }
-  tUltimoLatido = tMaximo;
-  hayLatidoPrevio = true;
-  if (latidosActuales < 65535) latidosActuales++;
-
-  if (nRR >= 2) {                                          // la FC se muestra desde el 3.er latido
-    unsigned long suma = 0;
-    unsigned int menor = 65535, mayor = 0;
-    for (uint8_t i = 0; i < nRR; i++) {
-      suma += rrMs[i];
-      if (rrMs[i] < menor) menor = rrMs[i];
-      if (rrMs[i] > mayor) mayor = rrMs[i];
-    }
-    const float media = (float)suma / nRR;
-    bpmActual = (unsigned int)(60000.0f / media + 0.5f);
-    ritmoRegular = (nRR < 3) || ((float)(mayor - menor) <= 0.15f * media);
-    bpmDeriv[derivacion] = bpmActual;
-    ampDeriv[derivacion] = (unsigned int)(ampMedia / CUENTAS_POR_MV * 100.0f + 0.5f);
-    latidosDeriv[derivacion] = latidosActuales;
-    if (modoWeb) enviarLatidoWeb();
-  }
-}
-
-void actualizarLedLatido() {
-  if (apagarLedLatidoMs && (long)(millis() - apagarLedLatidoMs) >= 0) {
-    digitalWrite(PIN_LED_LATIDO, LOW);
-    apagarLedLatidoMs = 0;
-  }
-}
-
 // ---------- Informes de texto (Serial Monitor) ----------
 const __FlashStringHelper* categoriaFC(unsigned int bpm) {
   if (bpm < 60) return F("baja, bradicardia");
@@ -473,13 +704,22 @@ const __FlashStringHelper* categoriaFC(unsigned int bpm) {
 void imprimirReporte() {
   Serial.print('['); Serial.print(NOMBRES[derivacion]); Serial.print(F("] "));
   if (electrodoSuelto) { Serial.println(F("electrodo suelto: revisa que los 3 electrodos esten pegados")); return; }
-  if (bpmActual == 0) { Serial.println(F("midiendo... quedate quieto y espera unos 5 segundos")); return; }
+  if (bpmActual == 0) {
+    switch (calidad) {
+      case SIN_SENAL: Serial.println(F("no se detectan latidos: revisa que los 3 electrodos esten bien pegados")); break;
+      case RUIDO:     Serial.println(F("senal con mucho ruido: quedate quieto, no hables y revisa los electrodos")); break;
+      case IRREGULAR: Serial.println(F("latidos irregulares o artefactos: quedate quieto unos segundos")); break;
+      default:        Serial.println(F("midiendo... quedate quieto y espera unos 5 segundos")); break;
+    }
+    return;
+  }
   Serial.print(F("FC ")); Serial.print(bpmActual); Serial.print(F(" lpm ("));
   Serial.print(categoriaFC(bpmActual));
   Serial.print(F(") | RR ")); Serial.print(rrActual);
   Serial.print(F(" ms | QRS ")); Serial.print(ampMedia / CUENTAS_POR_MV, 2);
   Serial.print(F(" mV | ritmo ")); Serial.print(ritmoRegular ? F("regular") : F("irregular"));
-  Serial.print(F(" | latidos ")); Serial.println(latidosActuales);
+  Serial.print(F(" | latidos ")); Serial.print(latidosActuales);
+  Serial.println(calidad == BUENA ? F("") : F(" | (senal inestable)"));
 }
 
 void imprimirResumen() {
@@ -684,9 +924,10 @@ void loop() {
     digitalWrite(LED_BUILTIN, electrodoSuelto ? HIGH : LOW);
   }
 
+  // 6) Detección de latidos y frecuencia cardíaca
   if (cuentaInicio < calentamiento) { cuentaInicio++; valor = 0; }
   else if (electrodoSuelto) { reiniciarAnalisis(); }
-  else { analizarLatidos(valor); }                    // 6) FC, amplitud y ritmo
+  else { alimentarDetector(valor); }
 
   // Modo web: protocolo del proyecto, una línea por muestra
   if (modoWeb) { salidaWeb(x); return; }

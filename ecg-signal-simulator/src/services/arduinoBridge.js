@@ -237,6 +237,8 @@ class ArduinoBridge extends EventEmitter {
         if (bpm >= 30 && bpm <= 220) {
           this.estado.bpm = bpm;
           this.emit('bpm', bpm);
+        } else if (bpm === 0 && this.estado.bpm !== null) {
+          this._actualizar({ bpm: null }); // H,0: el Arduino ya no tiene una medición confiable
         }
         return true;
       }

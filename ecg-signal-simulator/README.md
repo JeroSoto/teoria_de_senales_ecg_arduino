@@ -151,7 +151,7 @@ Líneas de texto terminadas en `\n`.
 | PC → Arduino | `WEB` | Pide el protocolo completo (lo envían el servidor y la página solos) |
 | Arduino → PC | `I,ECG_PLOTTER_TEORIA,2.0,fs=250` | Anuncio del modo web |
 | Arduino → PC | `S,<adc>` | Muestra del ECG (0–1023) a `fs` Hz |
-| Arduino → PC | `H,<bpm>` | Frecuencia cardíaca calculada a bordo |
+| Arduino → PC | `H,<bpm>` | Frecuencia cardíaca calculada a bordo (`H,0` = ya no hay una medición confiable) |
 | Arduino → PC | `R,<rr ms>,<QRS cmV>,<1\|0>` | Intervalo RR, amplitud del QRS (centésimas de mV) y ritmo regular/irregular |
 | Arduino → PC | `D,<derivación>` | Derivación que se está midiendo (I, II, III, AVR, AVL, AVF, V1–V6) |
 | Arduino → PC | `L,<0\|1>` | 1 = electrodo suelto |
@@ -161,6 +161,20 @@ Líneas de texto terminadas en `\n`.
 Si el sketch no entiende `WEB` (por ejemplo, una versión anterior), la página sigue funcionando con el formato del Plotter; y si no llega nada legible en 5 s, prueba 115200 y 9600 baudios.
 
 **Conversión a mV:** el servidor resta la componente continua con un promedio móvil exponencial (τ ≈ 1,5 s, equivale a un pasa-altas muy suave) y divide por `ARDUINO_COUNTS_PER_MV` (≈ 225 para AD8232 con referencia de 5 V). Ajusta ese valor si la señal se ve muy grande o pequeña.
+
+### 5.3.1. Cómo se calcula la frecuencia cardíaca (página y sketch, v3)
+
+El mismo algoritmo corre en el navegador (`signalProcessing.js`) y en el Arduino (`ecg_plotter_teoria.ino`):
+
+1. **Pan-Tompkins:** notch de 60 Hz → pasa-banda 5–15 Hz → derivada → cuadrado → integración de 150 ms → umbral adaptativo entre el nivel de los QRS (SPK) y el del ruido (NPK).
+2. **Período refractario de 200 ms** y **discriminación de la onda T:** un pico entre 200 y 360 ms después del QRS con menos de la mitad de su *pendiente* máxima es la onda T. La T puede ser tan alta como el QRS, pero nunca tan empinada; contarla como latido era lo que duplicaba el BPM (~200 lpm).
+3. **Búsqueda hacia atrás:** si pasa 1,66 RR sin latido, se recupera el QRS que quedó bajo el umbral.
+4. **BPM = 60 / RR** con la **mediana de los últimos 8 intervalos RR** (300–2000 ms), y solo si la señal es confiable:
+   * relación señal/ruido SPK/NPK ≥ 3 (con un ECG real es de 8 a 30; sin electrodos ronda 2);
+   * al menos 6 de 8 intervalos a ±15 % de la mediana (el ruido muscular mete intervalos al azar).
+5. Si no se cumple, se muestra «--» con el motivo (ruido, latidos irregulares o sin latidos); el último valor confiable se conserva 3 s.
+
+La página da prioridad a su propio detector (recibe la señal completa a 250 Hz); el BPM del Arduino aparece en la tarjeta del Arduino y se usa solo con el formato del Serial Plotter (40 puntos/s).
 
 ### 5.4. API REST
 
@@ -202,7 +216,7 @@ Lista de verificación manual:
 3. Crear cuenta e iniciar sesión → aparece el nombre y la tarjeta Arduino.
 4. **Probar conexión (PING)** → el registro muestra `PING → OK (pong)`.
 5. Marcar **LED externo** → el LED de D8 se enciende (con hardware) y la casilla se mantiene tras confirmar el Arduino.
-6. **Usar señal del Arduino** → el monitor cambia a “ECG real · Arduino AD8232” y el BPM sigue al Arduino.
+6. **Usar señal del Arduino** → el monitor cambia a “ECG real · Arduino” y el BPM aparece en unos 5 s. Sin electrodos debe mostrar «--» con un aviso, nunca un número.
 7. Abrir una segunda pestaña con la misma sesión, cambiar el LED en una → se refleja en la otra.
 8. Activar **Guardar mi frecuencia cardíaca** → aparecen filas en el historial y en phpMyAdmin (`mediciones`).
 9. Desconectar un electrodo → *Electrodos: ⚠ Sueltos*.

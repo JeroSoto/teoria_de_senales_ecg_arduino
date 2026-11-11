@@ -152,6 +152,7 @@ const ArduinoLink = {
             : '—';
         if (e.derivacion) this.el.selDer.value = e.derivacion;
         this.el.fs.textContent = `${e.fs} Hz`;
+        if (!e.bpm) this.bpm = null;   // el Arduino ya no tiene una medición confiable (H,0)
         this.el.bpm.textContent = e.bpm ? `${e.bpm} lpm` : '—';
         this.el.leads.textContent = !e.conectado ? '—' : e.derivacionesSueltas ? '⚠ Sueltos' : 'OK';
         this.el.leads.classList.toggle('warn', e.derivacionesSueltas);

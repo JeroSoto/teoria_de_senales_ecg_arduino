@@ -227,6 +227,7 @@ const UsbSerial = {
                 const bpm = Number(resto[0]);
                 if (!Number.isFinite(bpm)) return false;
                 if (bpm >= 30 && bpm <= 220) { this.bpm = bpm; this.el.bpm.textContent = `${bpm} lpm`; }
+                else if (bpm === 0) { this.bpm = null; this.el.bpm.textContent = '—'; }   // H,0: sin medición confiable
                 return true;
             }
             case 'R': {

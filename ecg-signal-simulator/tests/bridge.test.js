@@ -160,3 +160,11 @@ test('ARDUINO_PORT=auto elige la placa USB e ignora los puertos Bluetooth', () =
   assert.equal(elegirPuertoArduino([bt, { path: 'COM9', vendorId: '1A86', productId: '7523' }]).descripcion, 'CH340 (clon)');
   assert.equal(elegirPuertoArduino([{ path: '/dev/ttyUSB0', manufacturer: 'FTDI' }]).path, '/dev/ttyUSB0');
 });
+
+test('H,0 del sketch borra el BPM (ya no hay una medición confiable)', () => {
+  const bridge = new ArduinoBridge(config);
+  bridge._procesarLinea('H,72');
+  assert.equal(bridge.getEstado().bpm, 72);
+  bridge._procesarLinea('H,0');
+  assert.equal(bridge.getEstado().bpm, null);
+});
