@@ -174,6 +174,8 @@ El mismo algoritmo corre en el navegador (`signalProcessing.js`) y en el Arduino
    * al menos 6 de 8 intervalos a ±15 % de la mediana (el ruido muscular mete intervalos al azar);
    * no más de 1 de las últimas 8 detecciones a menos de 300 ms: si hay más, es una interferencia periódica (p. ej. picos cada 0,26 s ≈ 230/min). Sin esta regla se descartaba uno de cada dos picos y salía un ritmo «regular» falso de ~115 lpm.
 5. Si no se cumple, se muestra «--» con el motivo (ruido, latidos irregulares o sin latidos); el último valor confiable se conserva 3 s.
+6. **Diagnóstico de contacto:** la página mide qué parte de la potencia es la red de 60 Hz (señal comparada con la misma señal tras un notch). Si es más del 80 % y no hay latidos, el AD8232 no está recibiendo el ECG (electrodos sin contacto o cable desconectado): se muestra «SIN CONTACTO» y qué revisar. Un ECG real se mide igual aunque tenga 1 mV de interferencia.
+7. Con el Arduino los filtros de la página (pasa-altas 0,5 Hz, notch 60 Hz y pasa-bajas 40 Hz) se encienden solos, porque la señal cruda del AD8232 trae la red y la deriva; al volver a la simulación se restauran.
 
 La página usa su propio detector (recibe la señal completa a 250 Hz). La FC que calcula el Arduino aparece en su tarjeta solo si el sketch es la **versión 3 o posterior**: los sketches anteriores contaban la onda T y el ruido como latidos (marcaban ~190–200 lpm), así que su FC se ignora y la página pide cargar `ecg_plotter_teoria.ino` v3. Con el formato del Serial Plotter (25–40 puntos/s) no hay señal suficiente para medir: se muestra «--».
 

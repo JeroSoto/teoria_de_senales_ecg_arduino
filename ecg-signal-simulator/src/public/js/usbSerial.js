@@ -134,6 +134,8 @@ const UsbSerial = {
         this.derivacion = null;
         this.ritmo = null;
         this.version = null;
+        this.leadsMedido = false;     // true cuando el sketch informa los electrodos (líneas L, USAR_LEADS_OFF)
+        this.diagnostico = null;
         this.pedidosWeb = 0;
         this.ultimoPedidoWeb = 0;
 
@@ -202,6 +204,13 @@ const UsbSerial = {
         this.estado(mensaje, error ? 'error' : '');
     },
 
+    /** app.js informa el diagnóstico de la señal (p. ej. 'sin-contacto') para la tarjeta de electrodos. */
+    mostrarDiagnostico(diagnostico) {
+        if (diagnostico === this.diagnostico) return;
+        this.diagnostico = diagnostico;
+        this.pintar();
+    },
+
     /** Sketch anterior a la versión 3: cuenta la onda T o el ruido como latidos, su BPM no se usa. */
     sketchAntiguo() {
         return this.formato === 'plotter' || this.formato === 'numeros' || (this.version !== null && this.version < 3);
@@ -252,6 +261,7 @@ const UsbSerial = {
             case 'L':
                 if (resto[0] !== '0' && resto[0] !== '1') return false;
                 this.sueltos = resto[0] === '1';
+                this.leadsMedido = true;
                 this.pintar();
                 return true;
             case 'I': {
@@ -262,6 +272,8 @@ const UsbSerial = {
                 this.dc = null;
                 this.version = parseFloat(resto[1]) || null;
                 this.el.device.textContent = `${resto[0]} v${resto[1] || '?'}`;
+                // el sketch v3 arranca en modo gráfica: quita el aviso de "sketch antiguo" de ese primer segundo
+                if (!this.sketchAntiguo() && !this.bpm) this.el.bpm.textContent = '—';
                 this.pintar();
                 return true;
             }
@@ -419,8 +431,14 @@ const UsbSerial = {
 
     pintar() {
         this.el.fsTxt.textContent = this.conectado ? `${this.fs} Hz` : '—';
-        this.el.leads.textContent = !this.conectado ? '—' : this.sueltos ? '⚠ Sueltos' : 'OK';
-        this.el.leads.classList.toggle('warn', this.conectado && this.sueltos);
+        // Sin las líneas L (LO+/LO− no conectados) el sketch no sabe si hay contacto: se usa el diagnóstico de la señal
+        const sinContacto = this.diagnostico === 'sin-contacto';
+        this.el.leads.textContent = !this.conectado ? '—'
+            : this.sueltos ? '⚠ Sueltos'
+            : sinContacto ? '⚠ Sin contacto (solo 60 Hz)'
+            : this.leadsMedido ? 'OK'
+            : this.diagnostico === 'buena' ? 'Con contacto' : 'Sin verificar';
+        this.el.leads.classList.toggle('warn', this.conectado && (this.sueltos || sinContacto));
         if (!this.conectado) this.el.bpm.textContent = '—';
         this.el.led.checked = this.led === 1;
         this.el.streamChk.checked = this.transmitiendo;
@@ -490,6 +508,7 @@ const UsbSerial = {
         if (!this.conectado) return { texto: 'DESCONECTADO', clase: 'error' };
         if (this.sueltos) return { texto: 'ELECTRODOS', clase: 'warn' };
         if (!this.ultimaLectura || Date.now() - this.ultimaLectura > 2500) return { texto: 'SIN DATOS', clase: 'warn' };
+        if (this.diagnostico === 'sin-contacto') return { texto: 'SIN CONTACTO', clase: 'warn' };
         return { texto: 'EN VIVO', clase: 'live' };
     },
 

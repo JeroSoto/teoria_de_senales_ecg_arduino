@@ -204,6 +204,45 @@ function mediana(lista) {
     return orden[Math.floor(orden.length / 2)];
 }
 
+/**
+ * Diagnóstico de la señal: ¿qué parte de la potencia es interferencia de la red (60 Hz)?
+ * Se compara la señal (sin la continua) con la misma señal pasada por un notch de 60 Hz.
+ * Promedios exponenciales de ~2 s. Con los electrodos sin contacto el AD8232 solo capta
+ * la red eléctrica: más del 80 % de la potencia queda en 60 Hz y no hay latidos.
+ */
+class DiagnosticoSenal {
+    constructor(fs) {
+        this.fs = fs;
+        this.hp = new Biquad('highpass', 0.5, fs);
+        this.notch = new Biquad('notch', 60, fs, 5);
+        this.alfa = 1 - Math.exp(-1 / (2 * fs));   // constante de tiempo de 2 s
+        this.potTotal = 0;
+        this.potRed = 0;
+        this.n = 0;
+    }
+
+    process(x) {
+        if (this.n === 0) { this.hp.prime(x); this.notch.prime(0); }
+        const sinContinua = this.hp.process(x);
+        const sinRed = this.notch.process(sinContinua);
+        const red = sinContinua - sinRed;
+        this.potTotal += this.alfa * (sinContinua * sinContinua - this.potTotal);
+        this.potRed += this.alfa * (red * red - this.potRed);
+        this.n++;
+    }
+
+    /** Fracción de la potencia que es red eléctrica (0–1); null mientras se calibra (3 s). */
+    get fraccionRed() {
+        if (this.n < 3 * this.fs || this.potTotal <= 0) return null;
+        return this.potRed / this.potTotal;
+    }
+
+    /** Amplitud de la interferencia de 60 Hz en mV (pico). */
+    get amplitudRed() {
+        return Math.sqrt(2 * this.potRed);
+    }
+}
+
 class SignalProcessor {
     constructor(sampleRate = 250) {
         this.fs = sampleRate;
@@ -232,14 +271,29 @@ class SignalProcessor {
         this.rapidas = [];            // últimas 8 detecciones: true si llegó a menos de 300 ms de la anterior
         // 'calibrando' | 'buena' | 'ruido' (señal/ruido baja o interferencia) | 'irregular' (RR dispersos) | 'sin-senal' (no hay latidos)
         this.calidad = 'calibrando';
+        this.diagnostico = this.fs > 130 ? new DiagnosticoSenal(this.fs) : null;
+    }
+
+    /**
+     * Resumen para el usuario: 'sin-contacto' si casi toda la señal es la red de 60 Hz y no hay
+     * latidos (electrodos sin contacto o cable desconectado); si no, la calidad del detector.
+     */
+    get diagnosticoSenal() {
+        const red = this.diagnostico ? this.diagnostico.fraccionRed : null;
+        if (red !== null && red > 0.8 && this.detectedBPM === null && this.calidad !== 'buena') return 'sin-contacto';
+        return this.calidad;
     }
 
     processSample(sample, currentTime) {
         // La detección usa la señal sin filtrar por el usuario: así no depende de qué botones estén activos.
         // Con menos de 100 Hz (p. ej. el formato del Serial Plotter de un sketch antiguo, 25–40 puntos/s)
         // el pasa-banda de 5–15 Hz no cabe bajo Nyquist: no se calcula un BPM (se muestra "--").
-        if (this.fs >= 100) this.detectRPeak(sample);
-        else this.detectedBPM = null;
+        if (this.fs >= 100) {
+            this.detectRPeak(sample);
+            if (this.diagnostico) this.diagnostico.process(sample);
+        } else {
+            this.detectedBPM = null;
+        }
 
         let output = sample;
 
@@ -349,5 +403,5 @@ class SignalProcessor {
 
 // Permite probar estas clases con Node.js (npm test); en el navegador no hace nada
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { Biquad, QRSDetector, SignalProcessor, mediana };
+    module.exports = { Biquad, QRSDetector, SignalProcessor, DiagnosticoSenal, mediana };
 }

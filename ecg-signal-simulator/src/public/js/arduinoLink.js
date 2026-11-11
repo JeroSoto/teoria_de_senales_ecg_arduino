@@ -154,8 +154,12 @@ const ArduinoLink = {
         this.el.fs.textContent = `${e.fs} Hz`;
         if (!e.bpm) this.bpm = null;   // el Arduino ya no tiene una medición confiable (H,0)
         this.el.bpm.textContent = e.bpm ? `${e.bpm} lpm` : e.sketchAntiguo ? '— (sketch antiguo)' : '—';
-        this.el.leads.textContent = !e.conectado ? '—' : e.derivacionesSueltas ? '⚠ Sueltos' : 'OK';
-        this.el.leads.classList.toggle('warn', e.derivacionesSueltas);
+        const sinContacto = this.diagnostico === 'sin-contacto';
+        this.el.leads.textContent = !e.conectado ? '—'
+            : e.derivacionesSueltas ? '⚠ Sueltos'
+            : sinContacto ? '⚠ Sin contacto (solo 60 Hz)'
+            : this.diagnostico === 'buena' ? 'Con contacto' : 'Sin verificar';
+        this.el.leads.classList.toggle('warn', e.derivacionesSueltas || sinContacto);
         // Sincroniza los controles con lo que realmente confirmó el Arduino
         this.el.led.checked = e.led === 1;
         this.el.streamChk.checked = e.transmitiendo;
@@ -169,7 +173,15 @@ const ArduinoLink = {
         if (!e.conectado) return { texto: 'DESCONECTADO', clase: 'error' };
         if (e.derivacionesSueltas) return { texto: 'ELECTRODOS', clase: 'warn' };
         if (Date.now() - this.ultimaMuestra > 2500) return { texto: 'SIN DATOS', clase: 'warn' };
+        if (this.diagnostico === 'sin-contacto') return { texto: 'SIN CONTACTO', clase: 'warn' };
         return { texto: 'EN VIVO', clase: 'live' };
+    },
+
+    /** app.js informa el diagnóstico de la señal (p. ej. 'sin-contacto') para la tarjeta de electrodos. */
+    mostrarDiagnostico(diagnostico) {
+        if (diagnostico === this.diagnostico) return;
+        this.diagnostico = diagnostico;
+        if (this.estado) this.mostrarEstado(this.estado);
     },
 
     async alternarPuerto() {

@@ -64,12 +64,29 @@ document.addEventListener('DOMContentLoaded', () => {
     humCheck.addEventListener('change', (e) => { generator.enableHum = e.target.checked; });
     wanderCheck.addEventListener('change', (e) => { generator.enableWander = e.target.checked; });
 
+    const FILTROS = [[btnHP, 'hpEnabled'], [btnNotch, 'notchEnabled'], [btnLP, 'lpEnabled']];
+    const fijarFiltro = (btn, key, activo) => {
+        processor[key] = activo;
+        btn.classList.toggle('active', activo);
+        btn.setAttribute('aria-pressed', String(activo));
+    };
     const toggleFilter = (btn, key) => {
-        processor[key] = !processor[key];
-        btn.classList.toggle('active', processor[key]);
-        btn.setAttribute('aria-pressed', String(processor[key]));
+        fijarFiltro(btn, key, !processor[key]);
         updateFilterLabel();
     };
+    // Con el Arduino los tres filtros se encienden solos: la señal cruda del AD8232 trae la red de 60 Hz
+    // y la deriva de la línea base, que tapan el ECG. Al volver a la simulación se restaura lo que había.
+    let filtrosSimulacion = null;
+    function filtrosParaFuente(conArduino) {
+        if (conArduino) {
+            if (!filtrosSimulacion) filtrosSimulacion = FILTROS.map(([, key]) => processor[key]);
+            for (const [btn, key] of FILTROS) fijarFiltro(btn, key, true);
+        } else if (filtrosSimulacion) {
+            FILTROS.forEach(([btn, key], i) => fijarFiltro(btn, key, filtrosSimulacion[i]));
+            filtrosSimulacion = null;
+        }
+        updateFilterLabel();
+    }
     btnHP.addEventListener('click', () => toggleFilter(btnHP, 'hpEnabled'));
     btnLP.addEventListener('click', () => toggleFilter(btnLP, 'lpEnabled'));
     btnNotch.addEventListener('click', () => toggleFilter(btnNotch, 'notchEnabled'));
@@ -107,7 +124,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function avisoCalidad(calidad) {
         const textos = {
             calibrando: 'Midiendo… quédate quieto: la frecuencia cardíaca aparece en unos 5 segundos.',
-            buena: 'Señal real del Arduino: frecuencia cardíaca confiable (mediana de los últimos 8 latidos). Activa los filtros para limpiar el trazo.',
+            buena: 'Señal real del Arduino: frecuencia cardíaca confiable (mediana de los últimos 8 latidos). Filtros activos: pasa-altas 0.5 Hz, notch 60 Hz y pasa-bajas 40 Hz.',
+            'sin-contacto': 'El AD8232 no está recibiendo tu ECG: casi toda la señal es la interferencia de la red eléctrica (60 Hz). Revisa: 1) que el cable de los electrodos esté bien metido en el conector del AD8232; 2) que las 3 almohadillas (RA, LA y RL) estén pegadas a la piel limpia y seca; 3) desconecta el cargador del computador. Cuando haya contacto, aparecerán los latidos.',
             ruido: 'Señal con ruido o interferencia: no se muestra una frecuencia cardíaca para no dar un valor falso. Quédate quieto, no hables, aleja el cable del cargador y revisa que los 3 electrodos estén bien pegados.',
             antiguo: 'Tu Arduino tiene un sketch antiguo (formato del Serial Plotter, pocos puntos por segundo): no alcanza para medir la frecuencia cardíaca. Carga arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino (versión 3) desde el Arduino IDE.',
             irregular: 'Latidos irregulares o artefactos de movimiento: quédate quieto unos segundos.',
@@ -130,9 +148,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (fuente !== lastSource) {
             lastSource = fuente;
             signalHeading.textContent = fuente ? fuente.etiqueta : 'ECG simulado · fs = 250 Hz';
-            signalNotice.textContent = fuente
-                ? 'Señal real del Arduino. Activa los filtros para limpiarla; la frecuencia cardíaca la calcula el Arduino (o el detector de la página).'
-                : AVISO_SIMULACION;
+            signalNotice.textContent = fuente ? avisoCalidad('calibrando') : AVISO_SIMULACION;
+            filtrosParaFuente(!!fuente);
             simControls.classList.toggle('dim', !!fuente);
             processor.resetDetector();     // otra señal → el detector debe recalibrarse
             renderer.clear();
@@ -183,7 +200,8 @@ document.addEventListener('DOMContentLoaded', () => {
             freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
             rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
             pintarEstado(fuente);
-            if (fuente) signalNotice.textContent = avisoCalidad(senalIncompleta ? 'antiguo' : processor.calidad);
+            if (fuente) signalNotice.textContent = avisoCalidad(senalIncompleta ? 'antiguo' : processor.diagnosticoSenal);
+            if (fuente && fuente.mostrarDiagnostico) fuente.mostrarDiagnostico(senalIncompleta ? null : processor.diagnosticoSenal);
         }
     }
 

@@ -201,3 +201,20 @@ test('si la señal desaparece 3 s, el BPM vuelve a "--" con calidad "sin-senal"'
     assert.equal(proc.detectedBPM, null);
     assert.equal(proc.calidad, 'sin-senal');
 });
+
+test('diagnóstico: si casi toda la señal es la red de 60 Hz y no hay latidos, es "sin-contacto"', () => {
+    // electrodos sin contacto: solo red de 60 Hz (~1 mV) y un poco de ruido, como en una captura real
+    const sinContacto = ecgAD8232({ soloRuido: true, ruido: 0.05, red: 1.0, segundos: 15 });
+    const proc = new SignalProcessor(FS);
+    sinContacto.forEach((v, n) => proc.processSample(v, n / FS));
+    assert.ok(proc.diagnostico.fraccionRed > 0.8, `fracción de red ${proc.diagnostico.fraccionRed}`);
+    assert.equal(proc.detectedBPM, null);
+    assert.equal(proc.diagnosticoSenal, 'sin-contacto');
+});
+
+test('un ECG real se mide aunque tenga 1 mV de interferencia de 60 Hz (no se confunde con "sin contacto")', () => {
+    const { bpm } = lecturas(ecgAD8232({ bpm: 70, T: 0.4, red: 1.0 }));
+    const mostrados = bpm.filter((b) => b !== null);
+    assert.ok(mostrados.length >= bpm.length * 0.9, 'debería mostrar el BPM casi siempre');
+    for (const b of mostrados) assert.ok(Math.abs(b - 70) <= 3, `mostró ${b} con 70 reales`);
+});
