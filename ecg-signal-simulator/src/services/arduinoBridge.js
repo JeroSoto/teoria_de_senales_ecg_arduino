@@ -73,6 +73,8 @@ class ArduinoBridge extends EventEmitter {
       liberado: false,       // true = el usuario soltó el puerto (p. ej. para subir un sketch)
       dispositivo: null,
       formato: null,         // 'protocolo' | 'plotter' | 'numeros'
+      versionSketch: null,   // versión anunciada en la línea I (la FC solo se usa desde la 3.0)
+      sketchAntiguo: false,  // true = su FC no es confiable (cuenta la onda T o el ruido) y no se usa
       baudios: config.mode === 'serial' ? config.baud : null,
       derivacion: null,
       rr: null,
@@ -234,6 +236,7 @@ class ArduinoBridge extends EventEmitter {
       case 'H': {
         const bpm = Number(resto[0]);
         if (!Number.isFinite(bpm)) return false;
+        if (this.estado.sketchAntiguo) return true; // FC de un sketch anterior a la v3: no se usa
         if (bpm >= 30 && bpm <= 220) {
           this.estado.bpm = bpm;
           this.emit('bpm', bpm);
@@ -259,10 +262,14 @@ class ArduinoBridge extends EventEmitter {
       case 'I': {
         if (!resto.length) return false;
         const fs = /fs=(\d+)/.exec(linea);
+        const version = parseFloat(resto[1]) || null;
         this._actualizar({
           dispositivo: `${resto[0]} v${resto[1] || '?'}`,
           formato: 'protocolo',
           fs: fs ? Number(fs[1]) : this.estado.fs,
+          versionSketch: version,
+          sketchAntiguo: version !== null && version < 3,
+          ...(version !== null && version < 3 ? { bpm: null } : {}),
         });
         this.dc = null;
         return true;
@@ -301,10 +308,8 @@ class ArduinoBridge extends EventEmitter {
     if (!sueltos && DERIVACIONES.includes(etiqueta) && etiqueta !== this.estado.derivacion) cambios.derivacion = etiqueta;
     if (Object.keys(cambios).length) this._actualizar(cambios);
 
-    if (fc >= 30 && fc <= 220 && fc !== this.estado.bpm) {
-      this.estado.bpm = fc;
-      this.emit('bpm', fc);
-    }
+    // La FC del formato del Plotter viene de un sketch anterior a la v3: no es confiable y no se usa
+    if (fc !== null && (!this.estado.sketchAntiguo || this.estado.bpm !== null)) this._actualizar({ sketchAntiguo: true, bpm: null });
     this._pedirModoWeb();
     this._muestraGenerica(muestra, { yaClasificada: true });
   }

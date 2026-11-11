@@ -132,8 +132,8 @@ const ArduinoLink = {
             this.fijarEstadoTexto('El puerto está abierto pero no llegan datos. Revisa que el sketch sea ecg_plotter_teoria.ino y que ARDUINO_BAUD=115200.', 'warn');
         } else if (e.derivacionesSueltas) {
             this.fijarEstadoTexto('Arduino conectado, pero hay electrodos sueltos (RA, LA, RL).', 'warn');
-        } else if (e.formato === 'plotter') {
-            this.fijarEstadoTexto(`Recibiendo el formato del Serial Plotter (${e.fs} puntos/s, ${e.baudios} baudios). Sube la versión del proyecto de ecg_plotter_teoria.ino para ver la onda completa a 250 Hz.`, 'connected');
+        } else if (e.sketchAntiguo) {
+            this.fijarEstadoTexto('Tu Arduino tiene un sketch antiguo: su frecuencia cardíaca no es confiable y no se muestra. Carga arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino (versión 3) desde el Arduino IDE.', 'warn');
         } else if (e.formato === 'numeros') {
             this.fijarEstadoTexto('Recibiendo datos de un sketch genérico (sin comandos). Para todas las funciones sube ecg_plotter_teoria.ino.', 'connected');
         } else {
@@ -153,7 +153,7 @@ const ArduinoLink = {
         if (e.derivacion) this.el.selDer.value = e.derivacion;
         this.el.fs.textContent = `${e.fs} Hz`;
         if (!e.bpm) this.bpm = null;   // el Arduino ya no tiene una medición confiable (H,0)
-        this.el.bpm.textContent = e.bpm ? `${e.bpm} lpm` : '—';
+        this.el.bpm.textContent = e.bpm ? `${e.bpm} lpm` : e.sketchAntiguo ? '— (sketch antiguo)' : '—';
         this.el.leads.textContent = !e.conectado ? '—' : e.derivacionesSueltas ? '⚠ Sueltos' : 'OK';
         this.el.leads.classList.toggle('warn', e.derivacionesSueltas);
         // Sincroniza los controles con lo que realmente confirmó el Arduino

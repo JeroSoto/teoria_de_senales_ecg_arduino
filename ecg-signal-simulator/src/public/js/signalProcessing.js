@@ -229,14 +229,15 @@ class SignalProcessor {
         this.intervalosRR = [];
         this.detectedBPM = null;      // null hasta tener 4 intervalos RR coherentes
         this.ultimoValido = -Infinity;
-        // 'calibrando' | 'buena' | 'ruido' (señal/ruido baja) | 'irregular' (RR dispersos) | 'sin-senal' (no hay latidos)
+        this.rapidas = [];            // últimas 8 detecciones: true si llegó a menos de 300 ms de la anterior
+        // 'calibrando' | 'buena' | 'ruido' (señal/ruido baja o interferencia) | 'irregular' (RR dispersos) | 'sin-senal' (no hay latidos)
         this.calidad = 'calibrando';
     }
 
     processSample(sample, currentTime) {
         // La detección usa la señal sin filtrar por el usuario: así no depende de qué botones estén activos.
-        // Con menos de 100 Hz (p. ej. el formato del Serial Plotter, 40 puntos/s) el pasa-banda de 5–15 Hz
-        // no cabe bajo Nyquist: en ese caso se usa la frecuencia cardíaca que calcula el Arduino.
+        // Con menos de 100 Hz (p. ej. el formato del Serial Plotter de un sketch antiguo, 25–40 puntos/s)
+        // el pasa-banda de 5–15 Hz no cabe bajo Nyquist: no se calcula un BPM (se muestra "--").
         if (this.fs >= 100) this.detectRPeak(sample);
         else this.detectedBPM = null;
 
@@ -310,7 +311,10 @@ class SignalProcessor {
         if (this.ultimoLatidoIdx === null) { this.ultimoLatidoIdx = idx; return; }
         const rr = (idx - this.ultimoLatidoIdx) / this.fs;   // intervalo RR en segundos
         // Menos de 300 ms (más de 200 lpm) no es un latido real en reposo: suele ser la onda T,
-        // un movimiento o ruido. Se descarta y se sigue midiendo desde el último latido válido.
+        // un movimiento o interferencia. Se descarta y se sigue midiendo desde el último latido válido,
+        // pero se anota: si se repite, la señal está contaminada (ver más abajo).
+        this.rapidas.push(rr < 0.3);
+        if (this.rapidas.length > 8) this.rapidas.shift();
         if (rr < 0.3) return;
         this.ultimoLatidoIdx = idx;
         if (rr > 2.0) { this.intervalosRR = []; return; }   // pausa o pérdida de señal: se empieza de nuevo
@@ -324,16 +328,20 @@ class SignalProcessor {
         //     Con un ECG real es de 8 a 30; sin electrodos (solo ruido) ronda 2.
         //   · ritmo coherente: al menos 3 de cada 4 intervalos RR (6 de 8) a ±15 % de la mediana.
         //     Un latido real pasa de sobra; el ruido muscular o de movimiento mete RR al azar y no.
+        //   · sin "latidos" imposibles: si 2 de las últimas 8 detecciones llegaron a menos de 300 ms,
+        //     hay una interferencia periódica (p. ej. cada 0.26 s ≈ 230/min). Sin esta regla se
+        //     descartaría uno de cada dos picos y saldría un ritmo "regular" falso (~115 lpm).
         // Así el ruido no produce BPM inventados (antes, sin electrodos, salían 150–200 lpm).
         const med = mediana(this.intervalosRR);
         const coherentes = this.intervalosRR.filter((v) => Math.abs(v - med) <= 0.15 * med).length;
         const senalRuido = this.qrs.spk / Math.max(1e-12, this.qrs.npk);
-        if (senalRuido >= 3 && coherentes * 4 >= this.intervalosRR.length * 3) {
+        const interferencia = this.rapidas.filter(Boolean).length >= 2;
+        if (senalRuido >= 3 && !interferencia && coherentes * 4 >= this.intervalosRR.length * 3) {
             this.detectedBPM = Math.round(60 / med);
             this.calidad = 'buena';
             this.ultimoValido = idx;
         } else {
-            this.calidad = senalRuido < 3 ? 'ruido' : 'irregular';
+            this.calidad = senalRuido < 3 || interferencia ? 'ruido' : 'irregular';
             if (idx - this.ultimoValido > 3 * this.fs) this.detectedBPM = null;   // conserva el último valor 3 s
         }
     }

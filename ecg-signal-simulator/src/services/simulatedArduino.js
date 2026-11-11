@@ -25,7 +25,7 @@ class SimulatedArduino extends EventEmitter {
   open() {
     setImmediate(() => {
       this.emit('open');
-      this.emit('line', `I,ECG_ARDUINO_SIM,1.0,fs=${this.fs}`);
+      this.emit('line', `I,ECG_ARDUINO_SIM,3.0,fs=${this.fs}`);
     });
     this.ultimoTick = Date.now();
     this.timer = setInterval(() => this._tick(), 20);

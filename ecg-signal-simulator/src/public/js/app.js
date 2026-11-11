@@ -108,11 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const textos = {
             calibrando: 'Midiendo… quédate quieto: la frecuencia cardíaca aparece en unos 5 segundos.',
             buena: 'Señal real del Arduino: frecuencia cardíaca confiable (mediana de los últimos 8 latidos). Activa los filtros para limpiar el trazo.',
-            ruido: 'Señal con mucho ruido: no se muestra una frecuencia cardíaca para no dar un valor falso. Quédate quieto, no hables y revisa que los 3 electrodos estén bien pegados.',
+            ruido: 'Señal con ruido o interferencia: no se muestra una frecuencia cardíaca para no dar un valor falso. Quédate quieto, no hables, aleja el cable del cargador y revisa que los 3 electrodos estén bien pegados.',
+            antiguo: 'Tu Arduino tiene un sketch antiguo (formato del Serial Plotter, pocos puntos por segundo): no alcanza para medir la frecuencia cardíaca. Carga arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino (versión 3) desde el Arduino IDE.',
             irregular: 'Latidos irregulares o artefactos de movimiento: quédate quieto unos segundos.',
             'sin-senal': 'No se detectan latidos: revisa que los 3 electrodos (RA, LA, RL) estén pegados a la piel y conectados al AD8232.',
         };
-        return textos[calidad] || 'Señal del Arduino en formato del Serial Plotter: la frecuencia cardíaca la calcula el Arduino.';
+        return textos[calidad] || textos.calibrando;
     }
 
     // Muestra un valor numérico o "--" mientras todavía no hay medición
@@ -167,12 +168,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (hasNewSamples) renderer.render();
 
-        // ¿Qué frecuencia cardíaca se muestra?
-        //  - Con la señal completa (≥ 100 Hz) manda el detector de la página: ve las mismas muestras
-        //    que se dibujan y solo da un valor si la señal es confiable (si no, "--").
-        //  - Con el formato del Serial Plotter (40 puntos/s) no se puede detectar aquí: se usa la del Arduino.
-        const usarArduino = fuente && processor.fs < 100;
-        const currentBPM = usarArduino ? (fuente.bpm || null) : processor.detectedBPM;
+        // ¿Qué frecuencia cardíaca se muestra? La del detector de la página: ve las mismas muestras que
+        // se dibujan y solo da un valor si la señal es confiable (si no, "--").
+        // Con el formato del Serial Plotter (25–40 puntos/s, sketch antiguo) no hay señal suficiente para
+        // medirla y la FC de ese sketch no es confiable (contaba la onda T o el ruido): se muestra "--".
+        const senalIncompleta = fuente && processor.fs < 100;
+        const currentBPM = senalIncompleta ? null : processor.detectedBPM;
         lastBpm = currentBPM;
         lastSourceName = fuente ? 'arduino' : 'simulado';
 
@@ -182,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
             freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
             rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
             pintarEstado(fuente);
-            if (fuente) signalNotice.textContent = avisoCalidad(usarArduino ? null : processor.calidad);
+            if (fuente) signalNotice.textContent = avisoCalidad(senalIncompleta ? 'antiguo' : processor.calidad);
         }
     }
 

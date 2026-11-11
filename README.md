@@ -31,7 +31,7 @@ Se estudia el **electrocardiograma (ECG)**: una señal bioeléctrica analógica,
 | Visualización en tiempo real (canvas, fs = 250 Hz) | ✅ Funciona |
 | Filtros digitales: pasa-altas 0.5 Hz, notch 60 Hz, pasa-bajas 40 Hz | ✅ Funciona; respuesta en frecuencia comprobada con pruebas automáticas |
 | Detector de latidos Pan-Tompkins y BPM | ✅ Error ≤ 2 lpm entre 40 y 180 lpm; ≤ 3 lpm con ruido, 60 Hz y deriva. **v3:** no cuenta la onda T (aunque sea alta) y, sin electrodos o con mucho ruido, muestra «--» en lugar de un BPM falso (antes marcaba ~200 lpm) |
-| BPM calculado en el Arduino (sketch v3.0) | ✅ Mismo algoritmo en el Uno (57 % de flash, 60 % de RAM): validado con una réplica del código en 12 señales tipo AD8232 |
+| BPM calculado en el Arduino (sketch v3.0) | ✅ Mismo algoritmo en el Uno (58 % de flash, 60 % de RAM): validado con una réplica del código en 12 señales tipo AD8232 e interferencias periódicas. La página ignora la FC de sketches anteriores a la v3 |
 | Análisis FFT, caracterización y filtrado con SciPy (`scripts/analisis_fft.py`) | ✅ Funciona y es reproducible (semilla fija) |
 | Servidor Node.js + Express + Sequelize + MySQL: usuarios e historial de BPM | ✅ Funciona (24 pruebas automáticas pasan) |
 | Enlace con Arduino por puerto serial (protocolo propio, comandos con confirmación) | ✅ Detección automática del puerto, mensajes cuando el Arduino IDE lo ocupa y botón para liberarlo. Probado con el Arduino simulado y con el protocolo del sketch; **pendiente:** validar con el AD8232 y electrodos reales |

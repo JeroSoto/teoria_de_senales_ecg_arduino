@@ -133,6 +133,7 @@ const UsbSerial = {
         this.validas = 0;
         this.derivacion = null;
         this.ritmo = null;
+        this.version = null;
         this.pedidosWeb = 0;
         this.ultimoPedidoWeb = 0;
 
@@ -201,6 +202,11 @@ const UsbSerial = {
         this.estado(mensaje, error ? 'error' : '');
     },
 
+    /** Sketch anterior a la versión 3: cuenta la onda T o el ruido como latidos, su BPM no se usa. */
+    sketchAntiguo() {
+        return this.formato === 'plotter' || this.formato === 'numeros' || (this.version !== null && this.version < 3);
+    },
+
     // ---------- Recepción ----------
     procesarLinea(linea) {
         if (!linea || !this.interpretar(linea)) return; // basura (baudios incorrectos): no cuenta
@@ -226,6 +232,7 @@ const UsbSerial = {
             case 'H': {
                 const bpm = Number(resto[0]);
                 if (!Number.isFinite(bpm)) return false;
+                if (this.sketchAntiguo()) { this.bpm = null; this.el.bpm.textContent = '— (sketch antiguo)'; return true; }
                 if (bpm >= 30 && bpm <= 220) { this.bpm = bpm; this.el.bpm.textContent = `${bpm} lpm`; }
                 else if (bpm === 0) { this.bpm = null; this.el.bpm.textContent = '—'; }   // H,0: sin medición confiable
                 return true;
@@ -253,6 +260,7 @@ const UsbSerial = {
                 this.formato = 'protocolo';
                 if (fs) this.fs = Number(fs[1]);
                 this.dc = null;
+                this.version = parseFloat(resto[1]) || null;
                 this.el.device.textContent = `${resto[0]} v${resto[1] || '?'}`;
                 this.pintar();
                 return true;
@@ -289,7 +297,8 @@ const UsbSerial = {
             this.derivacion = etiqueta;
             this.pintar();
         }
-        if (fc >= 30 && fc <= 220) { this.bpm = fc; this.el.bpm.textContent = `${fc} lpm`; }
+        // La FC de un sketch en formato del Plotter (versiones anteriores) no es confiable: no se usa
+        if (fc !== null) { this.bpm = null; this.el.bpm.textContent = '— (sketch antiguo)'; }
         // Pide el protocolo completo (250 Hz); si el sketch no lo entiende, se sigue con este formato
         const ahora = Date.now();
         if (this.pedidosWeb < 4 && ahora - this.ultimoPedidoWeb > 2500) {
@@ -444,9 +453,10 @@ const UsbSerial = {
         } else if (this.ultimaLectura) {
             const textos = {
                 numeros: 'Recibiendo datos de un sketch genérico (sin comandos). Para todas las funciones sube ecg_plotter_teoria.ino.',
-                plotter: `Recibiendo el formato del Serial Plotter (${this.fs} puntos/s). Sube la versión del proyecto de ecg_plotter_teoria.ino para ver la onda completa a 250 Hz.`,
+                plotter: 'Tu Arduino tiene un sketch antiguo: su frecuencia cardíaca no es confiable y no se muestra. Carga arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino (versión 3) desde el Arduino IDE.',
             };
-            this.estado(textos[this.formato] || 'Arduino conectado: recibiendo el ECG en tiempo real.', 'connected');
+            if (this.sketchAntiguo()) this.estado(textos[this.formato] || 'Tu Arduino tiene un sketch antiguo: su frecuencia cardíaca no es confiable y no se muestra. Carga arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino (versión 3) desde el Arduino IDE.', 'warn');
+            else this.estado(textos[this.formato] || 'Arduino conectado: recibiendo el ECG en tiempo real.', 'connected');
         }
     },
 

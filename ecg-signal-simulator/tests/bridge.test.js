@@ -89,7 +89,8 @@ test('entiende el modo gráfica de ecg_plotter_teoria.ino y le pide el modo web'
   const e = bridge.getEstado();
   assert.equal(e.formato, 'plotter');
   assert.equal(e.derivacion, 'II');
-  assert.equal(e.bpm, 72);
+  assert.equal(e.bpm, null, 'la FC del formato del Plotter (sketch antiguo) no se usa');
+  assert.equal(e.sketchAntiguo, true);
   assert.deepEqual(escritos, ['WEB'], 'debe pedir el protocolo completo');
   assert.equal(bridge.lote.length, 1);
   bridge._procesarLinea('SUELTO:0,FC:0,Cero:0');
@@ -167,4 +168,17 @@ test('H,0 del sketch borra el BPM (ya no hay una medición confiable)', () => {
   assert.equal(bridge.getEstado().bpm, 72);
   bridge._procesarLinea('H,0');
   assert.equal(bridge.getEstado().bpm, null);
+});
+
+test('la FC de un sketch anterior a la v3 se ignora (contaba la onda T y daba ~200 lpm)', () => {
+  const viejo = new ArduinoBridge(config);
+  viejo._procesarLinea('I,ECG_PLOTTER_TEORIA,2.0,fs=250');
+  viejo._procesarLinea('H,192');
+  assert.equal(viejo.getEstado().sketchAntiguo, true);
+  assert.equal(viejo.getEstado().bpm, null);
+  const nuevo = new ArduinoBridge(config);
+  nuevo._procesarLinea('I,ECG_PLOTTER_TEORIA,3.0,fs=250');
+  nuevo._procesarLinea('H,74');
+  assert.equal(nuevo.getEstado().sketchAntiguo, false);
+  assert.equal(nuevo.getEstado().bpm, 74);
 });

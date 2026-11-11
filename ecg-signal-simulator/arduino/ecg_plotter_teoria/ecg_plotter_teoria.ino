@@ -53,8 +53,9 @@
  *    5. Búsqueda hacia atrás: si pasa 1.66 RR sin latido, se recupera el QRS que quedó bajo el umbral.
  *    6. FC = 60 / RR con la MEDIANA de los últimos 8 intervalos RR, y solo si la señal es confiable:
  *         - relación señal/ruido >= 3 (con ECG real es 8-30; sin electrodos, ~2);
- *         - intervalos coherentes (desviación mediana <= 12 % del RR);
- *         - RR entre 300 y 2000 ms (200 a 30 lpm).
+ *         - ritmo coherente: al menos 6 de los últimos 8 RR a ±15 % de la mediana;
+ *         - RR entre 300 y 2000 ms (200 a 30 lpm), y no más de 1 de las últimas 8 detecciones
+ *           a menos de 300 ms: si hay más, es interferencia (p. ej. picos cada 0.26 s = 230/min).
  *       Si no se cumple, FC = 0 y el informe de texto dice por qué (ruido, ritmo irregular, sin latidos).
  *
  *  CÓMO VER LA GRÁFICA EN EL ARDUINO IDE
@@ -272,6 +273,7 @@ bool hayValido = false;
 unsigned long ultimoValido = 0;         // muestra del último cálculo de FC confiable
 Calidad calidad = CALIBRANDO;
 unsigned int bpmActual = 0, rrActual = 0;   // 0 = sin medición confiable
+uint8_t rapidas = 0;                    // últimas 8 detecciones (1 bit c/u): 1 = llegó a < 300 ms de la anterior
 float ampMedia = 0;                     // amplitud media del QRS en cuentas
 bool  ritmoRegular = true;
 unsigned int latidosActuales = 0;
@@ -369,6 +371,7 @@ unsigned int mediana(const unsigned int* v, uint8_t n) {
 
 void reiniciarFrecuencia() {
   nHist = 0;
+  rapidas = 0;
   hayRef = false;
   hayValido = false;
   calidad = CALIBRANDO;
@@ -472,7 +475,9 @@ void registrarLatido(unsigned long r, int16_t valorMax) {
   if (r <= refLatido) return;
   const unsigned long rrMs = (r - refLatido) * msDet;
   // Menos de 300 ms (más de 200 lpm) no es un latido real en reposo: suele ser la onda T,
-  // un movimiento o ruido. Se descarta y se sigue midiendo desde el último latido válido.
+  // un movimiento o interferencia. Se descarta y se sigue midiendo desde el último latido válido,
+  // pero se anota: si se repite, la señal está contaminada.
+  rapidas = (uint8_t)((rapidas << 1) | (rrMs < 300UL ? 1 : 0));
   if (rrMs < 300UL) return;
   refLatido = r;
   if (rrMs > 2000UL) { nHist = 0; return; }                // pausa o pérdida de señal: se empieza de nuevo
@@ -497,7 +502,10 @@ void registrarLatido(unsigned long r, int16_t valorMax) {
     if (rrHist[i] < menor) menor = rrHist[i];
     if (rrHist[i] > mayor) mayor = rrHist[i];
   }
-  const bool senalConfiable = spk >= 3.0f * npk;           // relación señal/ruido >= 3
+  uint8_t nRapidas = 0;
+  for (uint8_t m = rapidas; m; m >>= 1) nRapidas += m & 1;
+  // relación señal/ruido >= 3 y sin "latidos" imposibles (interferencia periódica)
+  const bool senalConfiable = spk >= 3.0f * npk && nRapidas < 2;
 
   if (senalConfiable && coherentes * 4 >= nHist * 3) {
     bpmActual = (unsigned int)((60000UL + med / 2) / med);   // FC = 60 / RR (mediana)
@@ -707,7 +715,7 @@ void imprimirReporte() {
   if (bpmActual == 0) {
     switch (calidad) {
       case SIN_SENAL: Serial.println(F("no se detectan latidos: revisa que los 3 electrodos esten bien pegados")); break;
-      case RUIDO:     Serial.println(F("senal con mucho ruido: quedate quieto, no hables y revisa los electrodos")); break;
+      case RUIDO:     Serial.println(F("senal con ruido o interferencia: quedate quieto, no hables, aleja el cable del cargador y revisa los electrodos")); break;
       case IRREGULAR: Serial.println(F("latidos irregulares o artefactos: quedate quieto unos segundos")); break;
       default:        Serial.println(F("midiendo... quedate quieto y espera unos 5 segundos")); break;
     }

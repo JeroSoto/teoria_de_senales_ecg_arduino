@@ -171,10 +171,11 @@ El mismo algoritmo corre en el navegador (`signalProcessing.js`) y en el Arduino
 3. **Búsqueda hacia atrás:** si pasa 1,66 RR sin latido, se recupera el QRS que quedó bajo el umbral.
 4. **BPM = 60 / RR** con la **mediana de los últimos 8 intervalos RR** (300–2000 ms), y solo si la señal es confiable:
    * relación señal/ruido SPK/NPK ≥ 3 (con un ECG real es de 8 a 30; sin electrodos ronda 2);
-   * al menos 6 de 8 intervalos a ±15 % de la mediana (el ruido muscular mete intervalos al azar).
+   * al menos 6 de 8 intervalos a ±15 % de la mediana (el ruido muscular mete intervalos al azar);
+   * no más de 1 de las últimas 8 detecciones a menos de 300 ms: si hay más, es una interferencia periódica (p. ej. picos cada 0,26 s ≈ 230/min). Sin esta regla se descartaba uno de cada dos picos y salía un ritmo «regular» falso de ~115 lpm.
 5. Si no se cumple, se muestra «--» con el motivo (ruido, latidos irregulares o sin latidos); el último valor confiable se conserva 3 s.
 
-La página da prioridad a su propio detector (recibe la señal completa a 250 Hz); el BPM del Arduino aparece en la tarjeta del Arduino y se usa solo con el formato del Serial Plotter (40 puntos/s).
+La página usa su propio detector (recibe la señal completa a 250 Hz). La FC que calcula el Arduino aparece en su tarjeta solo si el sketch es la **versión 3 o posterior**: los sketches anteriores contaban la onda T y el ruido como latidos (marcaban ~190–200 lpm), así que su FC se ignora y la página pide cargar `ecg_plotter_teoria.ino` v3. Con el formato del Serial Plotter (25–40 puntos/s) no hay señal suficiente para medir: se muestra «--».
 
 ### 5.4. API REST
 
