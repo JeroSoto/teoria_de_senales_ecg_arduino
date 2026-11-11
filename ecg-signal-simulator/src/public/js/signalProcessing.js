@@ -209,6 +209,9 @@ function mediana(lista) {
  * Se compara la señal (sin la continua) con la misma señal pasada por un notch de 60 Hz.
  * Promedios exponenciales de ~2 s. Con los electrodos sin contacto el AD8232 solo capta
  * la red eléctrica: más del 80 % de la potencia queda en 60 Hz y no hay latidos.
+ * También detecta la saturación: si la salida del AD8232 queda clavada en 0 V o en 3.3 V
+ * (la señal no cambia durante ≥ 0.5 s), el amplificador está saturado. Un ECG nunca está
+ * quieto tanto tiempo (ondas P y T, ruido). Suele faltar el electrodo RL o uno no hace contacto.
  */
 class DiagnosticoSenal {
     constructor(fs) {
@@ -219,6 +222,9 @@ class DiagnosticoSenal {
         this.potTotal = 0;
         this.potRed = 0;
         this.n = 0;
+        this.anterior = 0;
+        this.corridaPlana = 0;            // muestras seguidas sin cambio (< 0.01 mV ≈ 2 cuentas del ADC)
+        this.ultimaSaturacion = -Infinity;
     }
 
     process(x) {
@@ -228,7 +234,15 @@ class DiagnosticoSenal {
         const red = sinContinua - sinRed;
         this.potTotal += this.alfa * (sinContinua * sinContinua - this.potTotal);
         this.potRed += this.alfa * (red * red - this.potRed);
+        this.corridaPlana = this.n > 0 && Math.abs(x - this.anterior) < 0.01 ? this.corridaPlana + 1 : 0;
+        if (this.corridaPlana >= 0.5 * this.fs) this.ultimaSaturacion = this.n;
+        this.anterior = x;
         this.n++;
+    }
+
+    /** true si en los últimos 2 s la salida estuvo clavada (amplificador saturado) */
+    get saturada() {
+        return this.n - this.ultimaSaturacion < 2 * this.fs;
     }
 
     /** Fracción de la potencia que es red eléctrica (0–1); null mientras se calibra (3 s). */
@@ -279,8 +293,10 @@ class SignalProcessor {
      * latidos (electrodos sin contacto o cable desconectado); si no, la calidad del detector.
      */
     get diagnosticoSenal() {
+        const sinMedicion = this.detectedBPM === null && this.calidad !== 'buena';
+        if (sinMedicion && this.diagnostico && this.diagnostico.saturada) return 'saturado';
         const red = this.diagnostico ? this.diagnostico.fraccionRed : null;
-        if (red !== null && red > 0.8 && this.detectedBPM === null && this.calidad !== 'buena') return 'sin-contacto';
+        if (sinMedicion && red !== null && red > 0.8) return 'sin-contacto';
         return this.calidad;
     }
 

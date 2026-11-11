@@ -158,12 +158,18 @@ const ArduinoLink = {
         this.el.leads.textContent = !e.conectado ? '—'
             : e.derivacionesSueltas ? '⚠ Sueltos'
             : sinContacto ? '⚠ Sin contacto (solo 60 Hz)'
+            : this.diagnostico === 'saturado' ? '⚠ AD8232 saturado (revisa RL)'
             : this.diagnostico === 'buena' ? 'Con contacto' : 'Sin verificar';
         this.el.leads.classList.toggle('warn', e.derivacionesSueltas || sinContacto);
         // Sincroniza los controles con lo que realmente confirmó el Arduino
         this.el.led.checked = e.led === 1;
         this.el.streamChk.checked = e.transmitiendo;
         this.el.selFs.value = String(e.fs);
+    },
+
+    /** El servidor avisa si el ADC tocó 0 o 1023 en los últimos 5 s (AD8232 saturado). */
+    get saturada() {
+        return !!(this.estado && this.estado.saturado);
     },
 
     estadoSenal() {
@@ -174,6 +180,7 @@ const ArduinoLink = {
         if (e.derivacionesSueltas) return { texto: 'ELECTRODOS', clase: 'warn' };
         if (Date.now() - this.ultimaMuestra > 2500) return { texto: 'SIN DATOS', clase: 'warn' };
         if (this.diagnostico === 'sin-contacto') return { texto: 'SIN CONTACTO', clase: 'warn' };
+        if (this.diagnostico === 'saturado') return { texto: 'SATURADO', clase: 'warn' };
         return { texto: 'EN VIVO', clase: 'live' };
     },
 

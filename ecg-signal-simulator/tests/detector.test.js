@@ -218,3 +218,13 @@ test('un ECG real se mide aunque tenga 1 mV de interferencia de 60 Hz (no se con
     assert.ok(mostrados.length >= bpm.length * 0.9, 'debería mostrar el BPM casi siempre');
     for (const b of mostrados) assert.ok(Math.abs(b - 70) <= 3, `mostró ${b} con 70 reales`);
 });
+
+test('diagnóstico: si la salida del AD8232 queda clavada (saturada) ≥ 0.5 s, es "saturado"', () => {
+    const proc = new SignalProcessor(FS);
+    const x = ecgAD8232({ bpm: 70, segundos: 10 }).concat(new Array(2 * FS).fill(1.4));   // salida pegada al riel
+    x.forEach((v, n) => proc.processSample(v, n / FS));
+    assert.equal(proc.diagnostico.saturada, true);
+    const limpio = new SignalProcessor(FS);
+    ecgAD8232({ bpm: 70, segundos: 12 }).forEach((v, n) => limpio.processSample(v, n / FS));
+    assert.equal(limpio.diagnostico.saturada, false, 'un ECG normal nunca queda quieto 0.5 s');
+});

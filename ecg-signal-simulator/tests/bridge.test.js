@@ -182,3 +182,13 @@ test('la FC de un sketch anterior a la v3 se ignora (contaba la onda T y daba ~2
   assert.equal(nuevo.getEstado().sketchAntiguo, false);
   assert.equal(nuevo.getEstado().bpm, 74);
 });
+
+test('si el ADC toca 0 o 1023 el estado marca "saturado" (AD8232 saturado)', async () => {
+  const bridge = new ArduinoBridge(config);
+  bridge._procesarLinea('S,512');
+  bridge._vaciarLote();
+  assert.equal(bridge.getEstado().saturado, false);
+  bridge._procesarLinea('S,0');
+  bridge._vaciarLote();
+  assert.equal(bridge.getEstado().saturado, true);
+});

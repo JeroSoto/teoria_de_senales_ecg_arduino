@@ -52,4 +52,13 @@ Electrodos: conecta el cable de 3 derivaciones (RA, LA, RL) a las almohadillas a
 
 Si cambiaste la velocidad del sketch (comandos `300` … `57600`), escribe `0` en el Monitor Serie para volver a 115200, que es la que usa la página. De todas formas, la página prueba 115200 y 9600 si no entiende lo que llega.
 
+## Si la página dice «SIN CONTACTO» o «SATURADO»
+
+| Mensaje | Qué pasa | Qué revisar |
+|---------|----------|-------------|
+| **SIN CONTACTO** | Más del 80 % de la señal es la red de 60 Hz y no hay latidos: el AD8232 no recibe el ECG | Cable de electrodos metido hasta el fondo en el conector del AD8232; almohadillas nuevas sobre piel limpia y seca; cargador del computador desconectado |
+| **SATURADO** | La salida del AD8232 está clavada en 0 V o 3,3 V (el ADC llega a 0 o a ~675) | Casi siempre falta el electrodo **RL** (verde, abdomen o pierna derecha) o uno no hace contacto. El pin **SDN** no debe ir a GND. Tras pegar los electrodos, quédate quieto ~15 s |
+
+Mientras el AD8232 recibe bien la señal, su salida está alrededor de 1,65 V (≈ 337 en el ADC) y muchas placas tienen un LED que parpadea con cada latido. Para que el sketch informe los electrodos sueltos directamente, conecta LO+ a D10 y LO− a D11 y pon `USAR_LEADS_OFF = true`.
+
 El protocolo completo está en el README técnico (sección 5.3).

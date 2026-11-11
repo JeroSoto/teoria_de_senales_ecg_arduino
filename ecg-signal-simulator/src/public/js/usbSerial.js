@@ -331,7 +331,15 @@ const UsbSerial = {
         }
     },
 
+    /** true si el ADC llegó a 0 o a 1023 en los últimos 5 s: el AD8232 estaba saturado (sin ECG útil). */
+    get saturada() {
+        return Date.now() - (this.ultimoRecorte || 0) < 5000;
+    },
+
     agregar(adc) {
+        // Un AD8232 que funciona trabaja alrededor de 1.65 V y nunca llega a 0 V: si el ADC toca 0 o 1023
+        // la salida está saturada y los "picos" que se ven son los saltos de la saturación, no latidos.
+        if (adc <= 2 || adc >= 1021) this.ultimoRecorte = Date.now();
         // Quita la componente continua con un promedio móvil exponencial (τ ≈ 1.5 s) y pasa a mV
         this.dc = this.dc === null ? adc : this.dc + (adc - this.dc) / (this.fs * 1.5);
         if (this.active) {
@@ -436,6 +444,7 @@ const UsbSerial = {
         this.el.leads.textContent = !this.conectado ? '—'
             : this.sueltos ? '⚠ Sueltos'
             : sinContacto ? '⚠ Sin contacto (solo 60 Hz)'
+            : this.diagnostico === 'saturado' ? '⚠ AD8232 saturado (revisa RL)'
             : this.leadsMedido ? 'OK'
             : this.diagnostico === 'buena' ? 'Con contacto' : 'Sin verificar';
         this.el.leads.classList.toggle('warn', this.conectado && (this.sueltos || sinContacto));
@@ -509,6 +518,7 @@ const UsbSerial = {
         if (this.sueltos) return { texto: 'ELECTRODOS', clase: 'warn' };
         if (!this.ultimaLectura || Date.now() - this.ultimaLectura > 2500) return { texto: 'SIN DATOS', clase: 'warn' };
         if (this.diagnostico === 'sin-contacto') return { texto: 'SIN CONTACTO', clase: 'warn' };
+        if (this.diagnostico === 'saturado') return { texto: 'SATURADO', clase: 'warn' };
         return { texto: 'EN VIVO', clase: 'live' };
     },
 

@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const textos = {
             calibrando: 'Midiendo… quédate quieto: la frecuencia cardíaca aparece en unos 5 segundos.',
             buena: 'Señal real del Arduino: frecuencia cardíaca confiable (mediana de los últimos 8 latidos). Filtros activos: pasa-altas 0.5 Hz, notch 60 Hz y pasa-bajas 40 Hz.',
+            saturado: 'La salida del AD8232 está saturada (clavada en 0 V o en 3.3 V), así que no puede pasar el ECG. Casi siempre falta el electrodo RL (pierna o abdomen derecho) o uno de los electrodos no hace buen contacto: revisa que los 3 estén conectados al cable, presiona bien las almohadillas y quédate quieto unos 15 s para que el módulo se estabilice.',
             'sin-contacto': 'El AD8232 no está recibiendo tu ECG: casi toda la señal es la interferencia de la red eléctrica (60 Hz). Revisa: 1) que el cable de los electrodos esté bien metido en el conector del AD8232; 2) que las 3 almohadillas (RA, LA y RL) estén pegadas a la piel limpia y seca; 3) desconecta el cargador del computador. Cuando haya contacto, aparecerán los latidos.',
             ruido: 'Señal con ruido o interferencia: no se muestra una frecuencia cardíaca para no dar un valor falso. Quédate quieto, no hables, aleja el cable del cargador y revisa que los 3 electrodos estén bien pegados.',
             antiguo: 'Tu Arduino tiene un sketch antiguo (formato del Serial Plotter, pocos puntos por segundo): no alcanza para medir la frecuencia cardíaca. Carga arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino (versión 3) desde el Arduino IDE.',
@@ -190,7 +191,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // Con el formato del Serial Plotter (25–40 puntos/s, sketch antiguo) no hay señal suficiente para
         // medirla y la FC de ese sketch no es confiable (contaba la onda T o el ruido): se muestra "--".
         const senalIncompleta = fuente && processor.fs < 100;
-        const currentBPM = senalIncompleta ? null : processor.detectedBPM;
+        // AD8232 saturado (ADC en 0/1023 o salida clavada): los saltos de la saturación parecen latidos, no se usan
+        const saturado = !!fuente && !senalIncompleta && (fuente.saturada || (processor.diagnostico && processor.diagnostico.saturada));
+        const diagnostico = senalIncompleta ? 'antiguo' : saturado ? 'saturado' : processor.diagnosticoSenal;
+        const currentBPM = senalIncompleta || saturado ? null : processor.detectedBPM;
         lastBpm = currentBPM;
         lastSourceName = fuente ? 'arduino' : 'simulado';
 
@@ -200,8 +204,8 @@ document.addEventListener('DOMContentLoaded', () => {
             freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
             rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
             pintarEstado(fuente);
-            if (fuente) signalNotice.textContent = avisoCalidad(senalIncompleta ? 'antiguo' : processor.diagnosticoSenal);
-            if (fuente && fuente.mostrarDiagnostico) fuente.mostrarDiagnostico(senalIncompleta ? null : processor.diagnosticoSenal);
+            if (fuente) signalNotice.textContent = avisoCalidad(diagnostico);
+            if (fuente && fuente.mostrarDiagnostico) fuente.mostrarDiagnostico(senalIncompleta ? null : diagnostico);
         }
     }
 
