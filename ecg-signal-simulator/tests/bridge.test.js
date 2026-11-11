@@ -188,7 +188,12 @@ test('si el ADC toca 0 o 1023 el estado marca "saturado" (AD8232 saturado)', asy
   bridge._procesarLinea('S,512');
   bridge._vaciarLote();
   assert.equal(bridge.getEstado().saturado, false);
+  bridge._procesarLinea('S,0');                 // una muestra suelta en el borde no basta
+  bridge._vaciarLote();
+  assert.equal(bridge.getEstado().saturado, false);
   bridge._procesarLinea('S,0');
+  bridge._procesarLinea('S,1023');
   bridge._vaciarLote();
   assert.equal(bridge.getEstado().saturado, true);
+  assert.equal(bridge.getEstado().saturadoReciente, true);
 });

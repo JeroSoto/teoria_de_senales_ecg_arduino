@@ -2,7 +2,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const fs = 250;
     const generator = new ECGGenerator(fs);
     const processor = new SignalProcessor(fs);
-    const renderer = new ECGRenderer('ecgCanvas', { fs });
+    const $ = (id) => document.getElementById(id);
+
+    // Preferencias del monitor (se recuerdan en este navegador; si no se puede, valores por defecto)
+    const leerPref = (clave, defecto) => { try { return localStorage.getItem('ecg.' + clave) || defecto; } catch { return defecto; } };
+    const guardarPref = (clave, valor) => { try { localStorage.setItem('ecg.' + clave, valor); } catch { /* sin almacenamiento */ } };
+    const celular = window.matchMedia && window.matchMedia('(max-width: 559px)').matches;
+    const prefs = {
+        ventana: Number(leerPref('ventana', celular ? '5' : '10')),
+        modo: leerPref('modo', 'desplazamiento'),
+        escala: leerPref('escala', 'auto'),
+    };
+    const renderer = new ECGRenderer('ecgCanvas', {
+        fs, ventana: prefs.ventana, modo: prefs.modo, escala: prefs.escala === 'auto' ? 'auto' : Number(prefs.escala),
+    });
+
+    // Botones del monitor: ventana de tiempo, modo de dibujo y amplitud
+    const marcarGrupo = (atributo, valor) => {
+        for (const b of document.querySelectorAll(`[data-${atributo}]`)) b.setAttribute('aria-pressed', String(b.dataset[atributo] === String(valor)));
+    };
+    marcarGrupo('ventana', prefs.ventana);
+    marcarGrupo('modo', prefs.modo);
+    marcarGrupo('escala', prefs.escala);
+    document.querySelector('.monitor-toolbar').addEventListener('click', (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        if (b.dataset.ventana) { renderer.setVentana(Number(b.dataset.ventana)); marcarGrupo('ventana', b.dataset.ventana); guardarPref('ventana', b.dataset.ventana); }
+        if (b.dataset.modo) { renderer.setModo(b.dataset.modo); renderer.dibujarCuadricula(); marcarGrupo('modo', b.dataset.modo); guardarPref('modo', b.dataset.modo); }
+        if (b.dataset.escala) { renderer.setEscala(b.dataset.escala === 'auto' ? 'auto' : Number(b.dataset.escala)); marcarGrupo('escala', b.dataset.escala); guardarPref('escala', b.dataset.escala); }
+        renderer.render();
+    });
+    const bpmNote = $('bpmNote');
+    let ultimoConfiable = null;          // último BPM confiable con esta fuente (se muestra como "último")
 
     let isRunning = true;
     let currentTime = 0;
@@ -15,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastFrame = null;
     let sampleDebt = 0;           // muestras pendientes de generar (parte fraccionaria incluida)
 
-    const $ = (id) => document.getElementById(id);
     const bpmSlider = $('bpmSlider');
     const bpmVal = $('bpmVal');
     const ampSlider = $('ampSlider');
@@ -124,6 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function avisoCalidad(calidad) {
         const textos = {
             calibrando: 'Midiendo… quédate quieto: la frecuencia cardíaca aparece en unos 5 segundos.',
+            estimado: 'Frecuencia cardíaca ESTIMADA por autocorrelación: los latidos se repiten con claridad, pero la señal tiene ruido y el detector latido a latido no los confirma uno por uno. Quédate quieto para obtener la medición directa.',
+            ultimo: 'Se muestra el último valor medido: ahora la señal no permite medir. Revisa los electrodos y quédate quieto.',
             buena: 'Señal real del Arduino: frecuencia cardíaca confiable (mediana de los últimos 8 latidos). Filtros activos: pasa-altas 0.5 Hz, notch 60 Hz y pasa-bajas 40 Hz.',
             saturado: 'La salida del AD8232 está saturada (clavada en 0 V o en 3.3 V), así que no puede pasar el ECG. Casi siempre falta el electrodo RL (pierna o abdomen derecho) o uno de los electrodos no hace buen contacto: revisa que los 3 estén conectados al cable, presiona bien las almohadillas y quédate quieto unos 15 s para que el módulo se estabilice.',
             'sin-contacto': 'El AD8232 no está recibiendo tu ECG: casi toda la señal es la interferencia de la red eléctrica (60 Hz). Revisa: 1) que el cable de los electrodos esté bien metido en el conector del AD8232; 2) que las 3 almohadillas (RA, LA y RL) estén pegadas a la piel limpia y seca; 3) desconecta el cargador del computador. Cuando haya contacto, aparecerán los latidos.',
@@ -153,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             filtrosParaFuente(!!fuente);
             simControls.classList.toggle('dim', !!fuente);
             processor.resetDetector();     // otra señal → el detector debe recalibrarse
+            ultimoConfiable = null;
             renderer.clear();
             sampleDebt = 0;
         }
@@ -194,17 +227,27 @@ document.addEventListener('DOMContentLoaded', () => {
         // AD8232 saturado (ADC en 0/1023 o salida clavada): los saltos de la saturación parecen latidos, no se usan
         const saturado = !!fuente && !senalIncompleta && (fuente.saturada || (processor.diagnostico && processor.diagnostico.saturada));
         const diagnostico = senalIncompleta ? 'antiguo' : saturado ? 'saturado' : processor.diagnosticoSenal;
-        const currentBPM = senalIncompleta || saturado ? null : processor.detectedBPM;
-        lastBpm = currentBPM;
+        // 1) BPM confiable del detector latido a latido; 2) si no hay, el estimado por autocorrelación
+        //    (respaldo con el mismo control de calidad); 3) si tampoco, el último valor confiable ("último").
+        //    "--" solo si con esta señal nunca hubo una medición: un número sin latidos sería inventado.
+        const bloqueado = senalIncompleta || saturado || (fuente && fuente.saturadaReciente);
+        let currentBPM = bloqueado ? null : processor.detectedBPM;
+        let nota = '';
+        if (currentBPM === null && !bloqueado && processor.bpmEstimado !== null) { currentBPM = processor.bpmEstimado; nota = 'estimado'; }
+        if (currentBPM !== null) ultimoConfiable = currentBPM;
+        else if (fuente && ultimoConfiable !== null) { currentBPM = ultimoConfiable; nota = 'último valor'; }
+        lastBpm = nota === 'último valor' ? null : currentBPM;   // el historial solo guarda mediciones actuales
         lastSourceName = fuente ? 'arduino' : 'simulado';
 
         if (ahora - lastMetricsUpdate >= 250) {
             lastMetricsUpdate = ahora;
             bpmDisplay.textContent = mostrar(currentBPM);
+            bpmNote.textContent = nota;
             freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
             rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
             pintarEstado(fuente);
-            if (fuente) signalNotice.textContent = avisoCalidad(diagnostico);
+            const aviso = nota === 'estimado' ? 'estimado' : nota === 'último valor' && diagnostico !== 'saturado' && diagnostico !== 'sin-contacto' ? 'ultimo' : diagnostico;
+            if (fuente) signalNotice.textContent = avisoCalidad(aviso);
             if (fuente && fuente.mostrarDiagnostico) fuente.mostrarDiagnostico(senalIncompleta ? null : diagnostico);
         }
     }

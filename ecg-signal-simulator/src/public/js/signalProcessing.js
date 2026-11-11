@@ -193,6 +193,7 @@ class QRSDetector {
 
         this.i2 = this.i1;
         this.i1 = integrada;
+        this.ultimaIntegrada = integrada;   // la usa la estimación por autocorrelación
         this.n++;
         return latido;
     }
@@ -286,6 +287,64 @@ class SignalProcessor {
         // 'calibrando' | 'buena' | 'ruido' (señal/ruido baja o interferencia) | 'irregular' (RR dispersos) | 'sin-senal' (no hay latidos)
         this.calidad = 'calibrando';
         this.diagnostico = this.fs > 130 ? new DiagnosticoSenal(this.fs) : null;
+        // Estimación por autocorrelación (respaldo cuando el detector latido a latido no confirma un BPM)
+        this.decimar = Math.max(1, Math.round(this.fs / 50));   // la energía del QRS se guarda a 50 Hz
+        this.energia = [];                                        // últimos 8 s
+        this.bpmEstimado = null;
+        this.confianzaEstimado = 0;
+    }
+
+    /**
+     * Frecuencia cardíaca por autocorrelación de la energía del QRS (señal integrada de Pan-Tompkins).
+     * Si los latidos se repiten cada T segundos, la energía también: su autocorrelación tiene un pico
+     * en T aunque algunos latidos no superen el umbral del detector. Es un respaldo "estimado":
+     *  - solo busca entre 40 y 180 lpm (T de 0.33 a 1.5 s);
+     *  - exige una periodicidad clara (correlación ≥ 0.55);
+     *  - si hay un pico fuerte por debajo de 0.3 s es interferencia periódica, no latidos → null;
+     *  - la energía debe venir en pulsos (percentil 95 ≥ 2.5 × mediana), como los QRS.
+     * Umbrales elegidos con señales de prueba y dos capturas reales: ningún valor falso.
+     * Para el ruido o la red de 60 Hz la energía integrada es casi constante y no hay pico → null.
+     */
+    estimarPorAutocorrelacion() {
+        const x = this.energia;
+        const fsE = this.fs / this.decimar;
+        const L = x.length;
+        if (L < 5 * fsE) return null;                      // al menos 5 s de señal
+        // Los latidos dan pulsos de energía (picos muy por encima del nivel típico); una oscilación
+        // continua o el ruido dan una energía pareja. Sin pulsos claros no se estima nada.
+        const orden = [...x].sort((p, q) => p - q);
+        const p95 = orden[Math.floor(0.95 * (L - 1))], p50 = orden[Math.floor(0.5 * (L - 1))];
+        if (!(p95 >= 2.5 * p50)) return null;
+        const media = x.reduce((a, v) => a + v, 0) / L;
+        const y = x.map((v) => v - media);
+        const e0 = y.reduce((a, v) => a + v * v, 0);
+        if (!(e0 > 0)) return null;
+        const r = (lag) => {
+            let c = 0;
+            for (let i = 0; i + lag < L; i++) c += y[i] * y[i + lag];
+            return (c / e0) * (L / (L - lag));              // corrige el sesgo de los retardos largos
+        };
+        const minLag = Math.round(0.2 * fsE), maxLag = Math.round(1.6 * fsE);
+        const R = [];
+        for (let lag = 0; lag <= maxLag + 1; lag++) R.push(lag < minLag ? 0 : r(lag));
+        const picos = [];
+        for (let lag = minLag + 1; lag <= maxLag; lag++) {
+            if (R[lag] > R[lag - 1] && R[lag] >= R[lag + 1]) picos.push({ lag, r: R[lag] });
+        }
+        if (picos.some((p) => p.lag < 0.3 * fsE && p.r > 0.5)) return null;   // interferencia más rápida que 200/min
+        const enRango = picos.filter((p) => p.lag >= 0.33 * fsE && p.lag <= 1.5 * fsE);
+        if (!enRango.length) return null;
+        const mejor = enRango.reduce((a, p) => (p.r > a.r ? p : a));
+        if (mejor.r < 0.55) return null;
+        // el primer pico casi tan alto como el mejor es el período (el mejor podría ser 2T)
+        const elegido = enRango.find((p) => p.r >= 0.8 * mejor.r);
+        const a = R[elegido.lag - 1], b = R[elegido.lag], c = R[elegido.lag + 1];
+        const ajuste = a - 2 * b + c !== 0 ? (0.5 * (a - c)) / (a - 2 * b + c) : 0;   // interpolación parabólica
+        const T = (elegido.lag + ajuste) / fsE;
+        const bpm = Math.round(60 / T);
+        if (bpm < 40 || bpm > 180) return null;
+        this.confianzaEstimado = mejor.r;
+        return bpm;
     }
 
     /**
@@ -293,7 +352,7 @@ class SignalProcessor {
      * latidos (electrodos sin contacto o cable desconectado); si no, la calidad del detector.
      */
     get diagnosticoSenal() {
-        const sinMedicion = this.detectedBPM === null && this.calidad !== 'buena';
+        const sinMedicion = this.detectedBPM === null && this.bpmEstimado === null && this.calidad !== 'buena';
         if (sinMedicion && this.diagnostico && this.diagnostico.saturada) return 'saturado';
         const red = this.diagnostico ? this.diagnostico.fraccionRed : null;
         if (sinMedicion && red !== null && red > 0.8) return 'sin-contacto';
@@ -367,6 +426,13 @@ class SignalProcessor {
 
         const idx = this.qrs.process(sample);
         if (idx !== null) this.registrarLatido(idx);
+
+        // energía del QRS a 50 Hz para la estimación por autocorrelación (se recalcula cada segundo)
+        if (this.qrs.n % this.decimar === 0 && this.qrs.n > this.qrs.calentamiento) {
+            this.energia.push(this.qrs.ultimaIntegrada || 0);
+            if (this.energia.length > 8 * (this.fs / this.decimar)) this.energia.shift();
+            if (this.energia.length % Math.round(this.fs / this.decimar) === 0) this.bpmEstimado = this.estimarPorAutocorrelacion();
+        }
 
         // 3 s sin latidos: no hay señal cardíaca (electrodos sueltos o sin contacto)
         const ahora = this.qrs.n;

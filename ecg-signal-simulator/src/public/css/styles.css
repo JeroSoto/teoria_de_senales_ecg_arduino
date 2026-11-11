@@ -336,6 +336,42 @@ strong { font-weight: 650; }
 .btn-fab:active { transform: scale(0.94); }
 .btn-fab.paused { border-color: rgba(94, 242, 194, 0.5); color: var(--green); }
 
+/* Opciones del monitor (ventana, modo, amplitud) */
+.monitor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 10px;
+}
+.seg {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: var(--inset);
+}
+.seg-label { padding: 0 8px 0 6px; color: var(--faint); font-size: 0.72rem; font-weight: 600; }
+.seg button {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: rgba(125, 220, 255, 0.18); color: #e6f8ff; box-shadow: inset 0 0 0 1px rgba(125, 220, 255, 0.35); }
+.metric-note { min-height: 1em; color: var(--yellow); font-size: 0.7rem; font-weight: 600; }
+.metric-note:empty { display: none; }
+
 .metrics-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

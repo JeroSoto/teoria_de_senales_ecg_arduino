@@ -86,7 +86,8 @@ class ArduinoBridge extends EventEmitter {
       bpm: null,
       derivacionesSueltas: false,
       sinDatos: false,
-      saturado: false,       // el ADC tocó 0 o 1023 en los últimos 5 s (AD8232 saturado)
+      saturado: false,       // ≥ 3 muestras en 0 o 1023 en un segundo, en los últimos 5 s (AD8232 saturado)
+      saturadoReciente: false, // lo mismo en los últimos 8 s (bloquea la estimación por autocorrelación)
       ultimaLectura: null,
       error: null,
     };
@@ -326,7 +327,12 @@ class ArduinoBridge extends EventEmitter {
 
   _agregarMuestra(adc) {
     // ADC en 0 o 1023: el AD8232 está saturado (los saltos de la saturación no son latidos)
-    if (adc <= 2 || adc >= 1021) this.ultimoRecorte = Date.now();
+    // (una muestra suelta en el borde no cuenta: hacen falta 3 en el mismo segundo)
+    if (adc <= 2 || adc >= 1021) {
+      const ahora = Date.now();
+      if (ahora - (this.bloqueRecorte || 0) > 1000) { this.bloqueRecorte = ahora; this.cuentaRecorte = 0; }
+      if (++this.cuentaRecorte >= 3) this.ultimoRecorte = ahora;
+    }
     // Quita la componente continua con un promedio móvil exponencial (τ ≈ 1.5 s)
     this.dc = this.dc === null ? adc : this.dc + (adc - this.dc) / (this.estado.fs * 1.5);
     this.lote.push((adc - this.dc) / this.config.countsPerMv); // → mV
@@ -392,7 +398,10 @@ class ArduinoBridge extends EventEmitter {
       this._actualizar({ sinDatos: true });
     }
     const saturado = ahora - (this.ultimoRecorte || 0) < 5000;
-    if (saturado !== this.estado.saturado) this._actualizar({ saturado });
+    const saturadoReciente = ahora - (this.ultimoRecorte || 0) < 8000;
+    if (saturado !== this.estado.saturado || saturadoReciente !== this.estado.saturadoReciente) {
+      this._actualizar({ saturado, saturadoReciente });
+    }
     if (!this.lote.length) return;
     const samples = this.lote.map((v) => Math.round(v * 1000) / 1000);
     this.lote = [];

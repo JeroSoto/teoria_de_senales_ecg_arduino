@@ -116,10 +116,32 @@
                     </button>
                 </div>
 
+                <div class="monitor-toolbar" aria-label="Opciones del monitor">
+                    <div class="seg" role="group" aria-label="Ventana de tiempo">
+                        <span class="seg-label">Ventana</span>
+                        <button type="button" data-ventana="5" aria-pressed="false">5 s</button>
+                        <button type="button" data-ventana="10" aria-pressed="true">10 s</button>
+                        <button type="button" data-ventana="20" aria-pressed="false">20 s</button>
+                    </div>
+                    <div class="seg" role="group" aria-label="Modo de dibujo">
+                        <span class="seg-label">Modo</span>
+                        <button type="button" data-modo="desplazamiento" aria-pressed="true" title="La señal corre de derecha a izquierda, como en LabVIEW">Desplazamiento</button>
+                        <button type="button" data-modo="barrido" aria-pressed="false" title="Un cursor recorre la pantalla, como en un monitor de hospital">Barrido</button>
+                    </div>
+                    <div class="seg" role="group" aria-label="Amplitud">
+                        <span class="seg-label">Amplitud</span>
+                        <button type="button" data-escala="auto" aria-pressed="true">Auto</button>
+                        <button type="button" data-escala="1" aria-pressed="false">×1</button>
+                        <button type="button" data-escala="2" aria-pressed="false">×2</button>
+                        <button type="button" data-escala="4" aria-pressed="false">×4</button>
+                    </div>
+                </div>
+
                 <div class="metrics-grid">
                     <div class="metric-card metric-main">
                         <span class="metric-label">Frecuencia cardíaca</span>
                         <span class="metric-value"><span id="bpmDisplay">--</span><span class="metric-unit">lpm</span></span>
+                        <span class="metric-note" id="bpmNote"></span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-label">Fundamental f</span>

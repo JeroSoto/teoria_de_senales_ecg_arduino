@@ -172,6 +172,10 @@ const ArduinoLink = {
         return !!(this.estado && this.estado.saturado);
     },
 
+    get saturadaReciente() {
+        return !!(this.estado && this.estado.saturadoReciente);
+    },
+
     estadoSenal() {
         const e = this.estado;
         if (this.servidorCaido || !e) return { texto: 'SIN SERVIDOR', clase: 'error' };

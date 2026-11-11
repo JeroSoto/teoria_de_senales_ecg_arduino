@@ -331,15 +331,25 @@ const UsbSerial = {
         }
     },
 
-    /** true si el ADC llegó a 0 o a 1023 en los últimos 5 s: el AD8232 estaba saturado (sin ECG útil). */
+    /** true si el AD8232 se saturó (≥ 3 muestras en 0 o 1023 en un segundo) en los últimos 5 s. */
     get saturada() {
         return Date.now() - (this.ultimoRecorte || 0) < 5000;
+    },
+
+    /** Igual, en los últimos 8 s (la ventana de la estimación por autocorrelación). */
+    get saturadaReciente() {
+        return Date.now() - (this.ultimoRecorte || 0) < 8000;
     },
 
     agregar(adc) {
         // Un AD8232 que funciona trabaja alrededor de 1.65 V y nunca llega a 0 V: si el ADC toca 0 o 1023
         // la salida está saturada y los "picos" que se ven son los saltos de la saturación, no latidos.
-        if (adc <= 2 || adc >= 1021) this.ultimoRecorte = Date.now();
+        // (una muestra suelta en el borde no cuenta: hacen falta 3 en el mismo segundo)
+        if (adc <= 2 || adc >= 1021) {
+            const ahora = Date.now();
+            if (ahora - (this.bloqueRecorte || 0) > 1000) { this.bloqueRecorte = ahora; this.cuentaRecorte = 0; }
+            if (++this.cuentaRecorte >= 3) this.ultimoRecorte = ahora;
+        }
         // Quita la componente continua con un promedio móvil exponencial (τ ≈ 1.5 s) y pasa a mV
         this.dc = this.dc === null ? adc : this.dc + (adc - this.dc) / (this.fs * 1.5);
         if (this.active) {

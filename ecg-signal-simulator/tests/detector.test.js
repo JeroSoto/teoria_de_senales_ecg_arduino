@@ -228,3 +228,23 @@ test('diagnóstico: si la salida del AD8232 queda clavada (saturada) ≥ 0.5 s, 
     ecgAD8232({ bpm: 70, segundos: 12 }).forEach((v, n) => limpio.processSample(v, n / FS));
     assert.equal(limpio.diagnostico.saturada, false, 'un ECG normal nunca queda quieto 0.5 s');
 });
+
+test('estimación por autocorrelación: da el BPM cuando el detector no alcanza y nunca con solo ruido', () => {
+    // QRS pequeño (0.4×) con ruido fuerte: el detector latido a latido no confirma, la estimación sí
+    const pequeno = ecgAD8232({ bpm: 55, T: 0.15, ruido: 0.12, red: 0.3 }).map((v, n) => v * (n >= 0 ? 0.4 : 1));
+    const proc = new SignalProcessor(FS);
+    const estimados = [];
+    pequeno.forEach((v, n) => { proc.processSample(v, n / FS); if (n > 12 * FS && n % FS === 0) estimados.push(proc.bpmEstimado); });
+    const validos = estimados.filter((b) => b !== null);
+    assert.ok(validos.length >= estimados.length * 0.8, `estimó solo ${validos.length} de ${estimados.length}`);
+    for (const b of validos) assert.ok(Math.abs(b - 55) <= 4, `estimó ${b} con 55 reales`);
+
+    // ruido + red, y una oscilación de 7 Hz (como una captura real sin contacto): nunca estima
+    for (const x of [ecgAD8232({ soloRuido: true, ruido: 0.3, red: 0.6 }),
+                     Array.from({ length: 30 * FS }, (_, n) => 0.8 * Math.sin(2 * Math.PI * 7 * n / FS))]) {
+        const p = new SignalProcessor(FS);
+        const e = [];
+        x.forEach((v, n) => { p.processSample(v, n / FS); if (n % FS === 0) e.push(p.bpmEstimado); });
+        assert.ok(e.every((b) => b === null), `estimó ${e.filter((b) => b !== null)} sin latidos`);
+    }
+});
