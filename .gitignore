@@ -28,3 +28,6 @@ Thumbs.db
 *.log
 dist/
 build/
+
+# Copia del sitio que genera el build de Vercel (vercel.json)
+/public/

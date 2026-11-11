@@ -226,7 +226,7 @@ Lista de verificación manual:
 
 ## 6. Versión web publicada en Vercel (cualquier celular o computador)
 
-El simulador (generador de ECG, ruido, filtros, detector de latidos y BPM) es 100 % JavaScript del lado del navegador, así que se publica gratis como **sitio estático** en [Vercel](https://vercel.com). La configuración ya está en `vercel.json` (raíz del repositorio): publica `ecg-signal-simulator/src/public`, sin compilar nada, con cabeceras de seguridad.
+El simulador (generador de ECG, ruido, filtros, detector de latidos y BPM) es 100 % JavaScript del lado del navegador, así que se publica gratis como **sitio estático** en [Vercel](https://vercel.com). La configuración ya está en `vercel.json` (raíz del repositorio): el «build» solo copia `ecg-signal-simulator/src/public` a `public/` y Vercel la publica con cabeceras de seguridad. En *Settings → Build and Deployment*, el *Framework Preset* debe ser **Other** (Vercel a veces detecta «Express» por el servidor de Node; con «Other» se publica como sitio estático).
 
 **Publicarlo (una sola vez, unos 2 minutos):**
 

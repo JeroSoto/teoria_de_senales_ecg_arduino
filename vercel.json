@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "echo 'Sitio estatico: no hay dependencias que instalar'",
-  "buildCommand": "echo 'Sitio estatico: no hay nada que compilar'",
-  "outputDirectory": "ecg-signal-simulator/src/public",
+  "buildCommand": "rm -rf public && cp -r ecg-signal-simulator/src/public public",
+  "outputDirectory": "public",
   "cleanUrls": false,
   "trailingSlash": false,
   "headers": [
