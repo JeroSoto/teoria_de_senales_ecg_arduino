@@ -12,7 +12,7 @@
 * Jerónimo Soto Villada
 * Milady Cristina Guapacha Montoya
 
-**Demo web (se abre desde el celular):** publicada en Vercel desde este repositorio (configuración en [`vercel.json`](vercel.json); pasos en [`ecg-signal-simulator/README.md`, sección 6](ecg-signal-simulator/README.md)).
+**Demo web (se abre desde el celular):** <https://teoria-de-senales-ecg-arduino.vercel.app> (publicada en Vercel; configuración en [`vercel.json`](vercel.json) y pasos en [`ecg-signal-simulator/README.md`, sección 6](ecg-signal-simulator/README.md)).
 **Presentación:** [`ecg-signal-simulator/docs/Presentacion_ECG_Arduino.pdf`](ecg-signal-simulator/docs/Presentacion_ECG_Arduino.pdf)
 
 ## 2. Descripción breve
