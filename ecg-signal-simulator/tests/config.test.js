@@ -62,3 +62,12 @@ test('la app de la nube responde config, no tiene Arduino por servidor y no fall
     await require('../src/config/database').sequelize.close();
   }
 });
+
+test('MySQL en línea con campos sueltos (DB_HOST remoto) también va cifrado; DB_SSL_VERIFICAR=false se respeta', () => {
+  const remoto = leerBaseDeDatos({ DB_HOST: 'mysql.mihosting.com', DB_USER: 'u', DB_PASSWORD: 'p', DB_NAME: 'arduino_ecg' });
+  assert.equal(remoto.ssl, true);
+  assert.equal(remoto.sslVerificar, true);
+  assert.equal(leerBaseDeDatos({ DB_HOST: '127.0.0.1' }).ssl, false, 'XAMPP sigue sin cifrar');
+  assert.equal(leerBaseDeDatos({ DATABASE_URL: 'mysql://u:p@db.x.com/a', DB_SSL_VERIFICAR: 'false' }).sslVerificar, false);
+  assert.equal(leerBaseDeDatos({ VERCEL: '1', DB_HOST: 'mysql.mihosting.com' }).configurada, true);
+});

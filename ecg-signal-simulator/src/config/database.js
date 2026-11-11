@@ -7,8 +7,13 @@ const mysqlPromesas = require('mysql2/promise');
 const env = require('./env');
 
 // Las bases en la nube (TiDB Cloud, Aiven…) exigen conexión cifrada (TLS)
+// DB_SSL_VERIFICAR=false acepta certificados propios del servidor (cifra igual, pero sin validar quién responde)
 const ssl = env.db.ssl
-  ? { minVersion: 'TLSv1.2', rejectUnauthorized: true, ...(env.db.sslCa ? { ca: env.db.sslCa.replace(/\\n/g, '\n') } : {}) }
+  ? {
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: env.db.sslVerificar !== false,
+      ...(env.db.sslCa ? { ca: env.db.sslCa.replace(/\\n/g, '\n') } : {}),
+    }
   : undefined;
 const enNube = env.entorno === 'nube';
 

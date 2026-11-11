@@ -38,6 +38,7 @@ function leerBaseDeDatos(e = process.env) {
       password: decodeURIComponent(u.password),
       sync: bool(e.DB_SYNC, true),
       ssl: bool(e.DB_SSL, !LOCALES.includes(host)),
+      sslVerificar: bool(e.DB_SSL_VERIFICAR, true),
       sslCa: e.DB_SSL_CA || '',
       configurada: true,
       origen: 'DATABASE_URL',
@@ -51,7 +52,9 @@ function leerBaseDeDatos(e = process.env) {
     user: e.DB_USER || 'root',
     password: e.DB_PASSWORD || '',
     sync: bool(e.DB_SYNC, true),
-    ssl: bool(e.DB_SSL, false),
+    // XAMPP (localhost) va sin cifrar; un MySQL en Internet, cifrado salvo que pongas DB_SSL=false
+    ssl: bool(e.DB_SSL, !LOCALES.includes(host)),
+    sslVerificar: bool(e.DB_SSL_VERIFICAR, true),
     sslCa: e.DB_SSL_CA || '',
     // En Vercel no hay XAMPP: sin DATABASE_URL la base se considera no configurada
     configurada: !(e.VERCEL && !e.DB_HOST),
