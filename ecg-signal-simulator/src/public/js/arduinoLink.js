@@ -61,6 +61,8 @@ const ArduinoLink = {
     },
 
     conectar() {
+        // En la página publicada (Vercel) no hay Arduino por el servidor: se usa «Arduino por USB»
+        if (window.ECGModo && window.ECGModo.arduino === 'ninguno') return;
         this.el.lock.hidden = true;
         this.el.panel.hidden = false;
         if (this.stream) return;

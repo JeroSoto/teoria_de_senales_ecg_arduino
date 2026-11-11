@@ -1,16 +1,13 @@
 // ============================================================
 // Servidor Express: sirve la web, la API REST y el flujo SSE
 // ============================================================
-const express = require('express');
 const os = require('os');
-const path = require('path');
 const { spawn } = require('child_process');
-const cookieParser = require('cookie-parser');
 
 const env = require('./config/env');
 const { iniciarBaseDeDatos } = require('./config/database');
 const ArduinoBridge = require('./services/arduinoBridge');
-const { noEncontrado, manejarErrores } = require('./middleware/errorHandler');
+const { crearApp } = require('./app');
 
 function abrirNavegador(url) {
   if (process.env.NO_ABRIR_NAVEGADOR === 'true') return;
@@ -42,59 +39,6 @@ function direccionesLocales() {
   );
   const reales = todas.filter((d) => !virtual.test(d.nombre));
   return (reales.length ? reales : todas).map((d) => d.ip);
-}
-
-/**
- * @param {ArduinoBridge|null} bridge  puente con el Arduino (null si no hay base de datos)
- * @param {{ baseDeDatos?: boolean }} opciones
- */
-function crearApp(bridge, { baseDeDatos = true } = {}) {
-  const app = express();
-  app.disable('x-powered-by');
-  app.use(express.json({ limit: '10kb' }));
-  app.use(cookieParser());
-
-  app.use((req, res, next) => {
-    res.set({
-      'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'X-Frame-Options': 'SAMEORIGIN',
-    });
-    next();
-  });
-
-  app.use(express.static(path.join(__dirname, 'public')));
-
-  // Configuración pública (no contiene secretos). Conserva los campos originales.
-  app.get('/api/config', (req, res) => {
-    res.json({
-      nombreProyecto: 'Simulador ECG & Teoría de Señales',
-      servidor: true,
-      baseDeDatos,
-      frecuenciaMuestreoHz: 250,
-      bpmPorDefecto: 75,
-      amplitudPorDefecto: 1.0,
-      nivelRuidoPorDefecto: 15,
-      arduino: { modo: bridge ? env.arduino.mode : 'ninguno', fs: env.arduino.fs },
-    });
-  });
-
-  if (baseDeDatos && bridge) {
-    app.use('/api/auth', require('./routes/auth'));
-    app.use('/api/arduino', require('./routes/arduino')(bridge));
-    app.use('/api/mediciones', require('./routes/mediciones'));
-    app.use('/api/admin', require('./routes/admin'));
-  } else {
-    // Sin MySQL no hay usuarios: estas rutas responden 503 y la página pasa al modo web
-    // (simulador + conexión USB directa desde el navegador).
-    app.use(['/api/auth', '/api/arduino', '/api/mediciones', '/api/admin'], (req, res) =>
-      res.status(503).json({ error: 'Base de datos no disponible: abre XAMPP y pulsa "Start" en MySQL.' })
-    );
-  }
-
-  app.use(noEncontrado);
-  app.use(manejarErrores);
-  return app;
 }
 
 async function iniciar() {
@@ -135,7 +79,7 @@ async function iniciar() {
     console.log('Servidor ECG iniciado correctamente.');
     console.log(`Accede en tu navegador a: ${url}`);
     for (const ip of direccionesLocales()) console.log(`Desde un celular en la misma red Wi-Fi: http://${ip}:${env.port}`);
-    console.log(baseDeDatos ? `Base de datos: ${env.db.name} @ ${env.db.host}:${env.db.port}` : 'Base de datos: NO disponible (modo web)');
+    console.log(baseDeDatos ? `Base de datos: ${env.db.name} @ ${env.db.host}:${env.db.port}${env.db.ssl ? ' (nube, TLS)' : ''}` : 'Base de datos: NO disponible (modo web)');
     if (bridge) {
       const puerto = env.arduino.port.toLowerCase() === 'auto' ? 'detección automática' : env.arduino.port;
       console.log(`Arduino: modo ${env.arduino.mode}${env.arduino.mode === 'serial' ? ` (${puerto})` : ''}`);

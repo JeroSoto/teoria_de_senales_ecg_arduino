@@ -21,20 +21,29 @@ const Auth = {
 
     /**
      * ¿Dónde se está ejecutando la página?
-     *   servidor → npm start con MySQL: sesión, historial y Arduino por el servidor.
-     *   sin-bd   → npm start con MySQL apagado: simulador + Arduino por USB desde el navegador.
-     *   web      → sitio estático (Vercel, Live Server, archivo local): simulador + Arduino por USB.
+     *   servidor → hay API y MySQL: sesión e historial. Con npm start además el Arduino por el
+     *              servidor; en Vercel (entorno «nube») el Arduino va por USB desde el navegador.
+     *   sin-bd   → hay API pero MySQL no responde: simulador + Arduino por USB.
+     *   web      → sitio estático (Live Server, archivo local): simulador + Arduino por USB.
      */
     async detectarModo() {
         let config = null;
         try { config = await API.get('/api/config'); } catch { /* sin servidor */ }
         const modo = !config || !config.servidor ? 'web' : config.baseDeDatos === false ? 'sin-bd' : 'servidor';
-        window.ECGModo = { modo, arduino: config && config.arduino ? config.arduino.modo : 'ninguno' };
+        window.ECGModo = {
+            modo,
+            entorno: config && config.entorno ? config.entorno : 'local',
+            bdConfigurada: !config || config.baseDeDatosConfigurada !== false,
+            arduino: config && config.arduino ? config.arduino.modo : 'ninguno',
+        };
         document.body.dataset.modo = modo;
+        document.body.dataset.arduino = window.ECGModo.arduino;
         document.dispatchEvent(new CustomEvent('modo:listo', { detail: window.ECGModo }));
 
         if (modo !== 'servidor') {
-            this.mostrarAviso(modo);
+            this.mostrarAviso(modo === 'sin-bd' && window.ECGModo.entorno === 'nube'
+                ? (window.ECGModo.bdConfigurada ? 'nube-caida' : 'nube-sin-bd')
+                : modo);
             this.fijarUsuario(null);
             return;
         }
@@ -48,6 +57,8 @@ const Auth = {
         const textos = {
             web: ['Versión web.', 'Simulador, filtros y análisis funcionan en cualquier celular. Para ver tu Arduino en vivo, conéctalo por USB a este computador y usa «Conectar Arduino» (Chrome o Edge). Sesión e historial solo con npm start.'],
             'sin-bd': ['MySQL está apagado.', 'Abre XAMPP, pulsa «Start» en MySQL y recarga para usar sesión e historial. Mientras tanto puedes conectar el Arduino por USB desde el navegador.'],
+            'nube-sin-bd': ['Cuentas en preparación.', 'Todavía no está conectada la base de datos, así que por ahora no se pueden crear cuentas. El simulador, los filtros y el Arduino por USB funcionan normalmente.'],
+            'nube-caida': ['Sin conexión con la base de datos.', 'Las cuentas y el historial no están disponibles en este momento; recarga en unos minutos. El simulador y el Arduino por USB siguen funcionando.'],
         };
         const [titulo, texto] = textos[modo];
         document.getElementById('demoTitle').textContent = titulo;

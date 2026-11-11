@@ -5,6 +5,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { Usuario } = require('../models');
+const env = require('../config/env');
 const { emitirToken, borrarToken, requiereAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -38,13 +39,16 @@ router.post('/registro', limitador, async (req, res, next) => {
       return res.status(400).json({ error: 'La contraseña debe tener entre 8 y 72 caracteres.' });
     }
 
-    // El primer usuario registrado queda como administrador
-    const esPrimero = (await Usuario.count()) === 0;
+    // Administradores: los correos de ADMIN_EMAILS; si no hay ninguno configurado, el primer usuario.
+    // (En la página pública conviene definir ADMIN_EMAILS para que nadie más se vuelva admin.)
+    const esAdmin = env.adminEmails.length
+      ? env.adminEmails.includes(email)
+      : (await Usuario.count()) === 0;
     const usuario = await Usuario.create({
       nombre,
       email,
       passwordHash: await bcrypt.hash(password, 10),
-      rol: esPrimero ? 'admin' : 'usuario',
+      rol: esAdmin ? 'admin' : 'usuario',
     });
 
     emitirToken(res, usuario);

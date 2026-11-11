@@ -37,6 +37,7 @@ Se estudia el **electrocardiograma (ECG)**: una señal bioeléctrica analógica,
 | Sketch `ecg_plotter_teoria.ino` (Serial Plotter del IDE + página) | ✅ Compila para Arduino Uno (39 % de memoria de programa). Modo gráfica con derivaciones, FC, ritmo y QRS; modo web a 250 Hz que la página activa sola |
 | Arduino por USB directo desde el navegador (Web Serial) | ✅ Funciona en la versión publicada (Chrome/Edge de computador) |
 | Interfaz «glass» adaptada a celulares | ✅ Barra inferior, monitor nítido en pantallas de alta densidad, controles táctiles de 44 px |
+| Cuentas e historial en la página publicada | ✅ API en Vercel (`api/index.js`) con MySQL en la nube (`DATABASE_URL`); `npm run migrar-nube` copia la base de XAMPP |
 | Señales reales de bases de datos (p. ej. MIT-BIH) | ⏳ Falta: comparar el detector con registros anotados |
 | Filtros de mayor orden / comparación IIR vs. FIR / variabilidad de la frecuencia cardíaca | ⏳ Falta |
 
@@ -70,7 +71,7 @@ El Arduino IDE puede quedar abierto, pero **cierra su Serial Plotter / Monitor S
 
 **C. Solo el simulador, sin servidor ni base de datos:** la página publicada en Vercel, o `ecg-signal-simulator/src/public/index.html` con *Live Server*. Funciona en «versión web»: simulador, filtros y Arduino por USB directo (Chrome/Edge).
 
-**D. Pruebas automáticas:** `npm test` (30 pruebas; las 9 de la API necesitan MySQL encendido). Solo las de procesamiento de señales: `cd ecg-signal-simulator && node --test tests/detector.test.js`.
+**D. Pruebas automáticas:** `npm test` (36 pruebas; las 9 de la API necesitan MySQL encendido). Solo las de procesamiento de señales: `cd ecg-signal-simulator && node --test tests/detector.test.js`.
 
 ## 6. Conceptos de Teoría de Señales utilizados hasta el momento
 
@@ -122,7 +123,8 @@ Señal de ejemplo: 75 lpm, fs = 250 Hz, 8 s (N = 2000), Δf = 0.125 Hz. Valores 
 ├── README.md                    ← este archivo
 ├── requirements.txt             ← dependencias de Python
 ├── .gitignore
-├── vercel.json                  ← publica la demo web en Vercel (sitio estático)
+├── vercel.json                  ← publica la página en Vercel (sitio + API)
+├── api/index.js                 ← API de Vercel: cuentas e historial con MySQL en la nube
 └── ecg-signal-simulator/
     ├── src/                     ← código principal (servidor Node.js y web)
     ├── data/                    ← muestra pequeña de ECG (JSON)

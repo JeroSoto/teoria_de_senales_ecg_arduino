@@ -1,11 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "echo 'Sitio estatico: no hay dependencias que instalar'",
+  "installCommand": "npm --prefix ecg-signal-simulator ci --omit=dev --ignore-scripts",
   "buildCommand": "rm -rf public && cp -r ecg-signal-simulator/src/public public",
   "outputDirectory": "public",
   "cleanUrls": false,
   "trailingSlash": false,
+  "functions": {
+    "api/index.js": { "maxDuration": 20 }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

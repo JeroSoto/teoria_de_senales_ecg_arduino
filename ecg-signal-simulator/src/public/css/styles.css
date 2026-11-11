@@ -618,6 +618,7 @@ select:disabled { opacity: 0.5; }
 
 /* Funciones que solo existen con npm start + MySQL */
 body:not([data-modo="servidor"]) .solo-servidor { display: none !important; }
+body[data-arduino="ninguno"] #arduinoCard { display: none !important; }
 
 /* ---------- Teoría ---------- */
 .theory-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }

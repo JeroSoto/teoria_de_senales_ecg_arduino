@@ -74,7 +74,8 @@ En el espectro de magnitud $|X[k]|$ (ver `results/README_resultados.md`) se iden
 ---
 
 ## 4. Estructura del Repositorio
-* `src/server.js`: Servidor Express (web + API REST + flujo SSE).
+* `src/server.js`: arranque local (`npm start`): servidor web + API + Arduino por el servidor.
+* `src/app.js`: la aplicación Express (rutas, sesión, base de datos). La usan `npm start` y la función de Vercel `api/index.js` (raíz del repositorio).
 * `src/config/`: variables de entorno (`env.js`) y conexión Sequelize/MySQL (`database.js`).
 * `src/models/`: modelos Sequelize `Usuario`, `Medicion` y `ComandoLog`.
 * `src/routes/`: rutas `auth`, `arduino`, `mediciones` y `admin`.
@@ -238,5 +239,19 @@ El simulador (generador de ECG, ruido, filtros, detector de latidos y BPM) es 10
 **Qué funciona en la versión publicada:**
 
 * Simulador, ruido, filtros, detector de latidos y teoría, en cualquier celular o computador.
+* **Cuentas e historial**: cualquiera con el enlace puede crear su cuenta, iniciar sesión y guardar su frecuencia cardíaca. Lo atiende la función `api/index.js` (la misma app Express de `npm start`, sin el Arduino por el servidor) y se guarda en **MySQL en la nube** (siguiente apartado).
 * **Arduino en vivo por USB** en Chrome o Edge de computador: conecta la placa a ese computador y pulsa **Conectar Arduino** (Web Serial; requiere HTTPS, que Vercel ya da). Safari y Firefox no tienen Web Serial.
-* Inicio de sesión, historial (MySQL) y la conexión del Arduino a través del servidor solo existen con `npm start`: la base de datos de XAMPP está en tu computador y no es accesible desde Internet. La página lo detecta (`/api/config` no responde) y muestra un aviso.
+
+### 6.1. Base de datos MySQL para la página publicada
+
+Vercel no puede conectarse al MySQL de XAMPP: ese servidor solo existe dentro de tu computador. Por eso la base se pone en un MySQL **en la nube**, y tanto la página publicada como `npm start` pueden usar la misma (las cuentas creadas desde el enlace aparecen también en tu computador).
+
+1. Crea una base MySQL gratuita. Recomendado: [TiDB Cloud](https://tidbcloud.com) (compatible con MySQL, plan gratuito, entra con GitHub) → *Create Cluster* (Starter/Serverless) → *Connect* → elige **Connect With: General** y copia la cadena `mysql://…`. Sirve cualquier MySQL accesible desde Internet (Aiven, Railway, el de tu universidad…).
+2. Cambia el final de la cadena por `/arduino_ecg` (el nombre de la base; si no existe se crea sola).
+3. En Vercel → tu proyecto → **Settings → Environment Variables** agrega:
+   * `DATABASE_URL` = la cadena del paso 2 (con tu contraseña).
+   * `ADMIN_EMAILS` = tu correo (así solo tú eres administrador; sin esto, el primer usuario que se registre lo sería).
+4. **Deployments → ⋯ → Redeploy** (las variables se aplican en el siguiente despliegue).
+5. **Opcional, para conservar tus usuarios de XAMPP:** pon la misma `DATABASE_URL` en tu `.env`, enciende MySQL en XAMPP y ejecuta `npm run migrar-nube`. Copia usuarios, historial y comandos (con el mismo id; si lo repites no duplica nada). Si dejas `DATABASE_URL` en `.env`, `npm start` también usará la base de la nube.
+
+La conexión a la nube va cifrada (TLS) automáticamente. Las tablas se crean solas en el primer uso. El secreto de las sesiones se deriva de la contraseña de la base si no defines `JWT_SECRET`, así no hay que configurar nada más.
