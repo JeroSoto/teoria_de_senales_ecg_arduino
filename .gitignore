@@ -21,6 +21,8 @@ venv/
 Thumbs.db
 .vscode/
 .idea/
+.claude/
+.vercel/
 
 # Registros y compilados
 *.log

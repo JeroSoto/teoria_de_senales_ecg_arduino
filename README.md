@@ -12,7 +12,7 @@
 * Jerónimo Soto Villada
 * Milady Cristina Guapacha Montoya
 
-**Demo web (se abre desde el celular):** <https://jerosoto.github.io/teoria_de_senales_ecg_arduino/> (disponible cuando el repositorio tiene activado GitHub Pages; ver [`ecg-signal-simulator/README.md`, sección 6](ecg-signal-simulator/README.md)).
+**Demo web (se abre desde el celular):** publicada en Vercel desde este repositorio (configuración en [`vercel.json`](vercel.json); pasos en [`ecg-signal-simulator/README.md`, sección 6](ecg-signal-simulator/README.md)).
 **Presentación:** [`ecg-signal-simulator/docs/Presentacion_ECG_Arduino.pdf`](ecg-signal-simulator/docs/Presentacion_ECG_Arduino.pdf)
 
 ## 2. Descripción breve
@@ -33,7 +33,10 @@ Se estudia el **electrocardiograma (ECG)**: una señal bioeléctrica analógica,
 | Detector de latidos Pan-Tompkins y BPM | ✅ Funciona: error ≤ 2 lpm entre 40 y 180 lpm (señal normal); ≤ 3 lpm con ruido, 60 Hz y deriva |
 | Análisis FFT, caracterización y filtrado con SciPy (`scripts/analisis_fft.py`) | ✅ Funciona y es reproducible (semilla fija) |
 | Servidor Node.js + Express + Sequelize + MySQL: usuarios e historial de BPM | ✅ Funciona (24 pruebas automáticas pasan) |
-| Enlace con Arduino por puerto serial (protocolo propio, comandos con confirmación) | ✅ Funciona con el Arduino simulado (mismo protocolo). **Pendiente:** validar el sketch con el módulo AD8232 y electrodos reales |
+| Enlace con Arduino por puerto serial (protocolo propio, comandos con confirmación) | ✅ Detección automática del puerto, mensajes cuando el Arduino IDE lo ocupa y botón para liberarlo. Probado con el Arduino simulado y con el protocolo del sketch; **pendiente:** validar con el AD8232 y electrodos reales |
+| Sketch `ecg_plotter_teoria.ino` (Serial Plotter del IDE + página) | ✅ Compila para Arduino Uno (39 % de memoria de programa). Modo gráfica con derivaciones, FC, ritmo y QRS; modo web a 250 Hz que la página activa sola |
+| Arduino por USB directo desde el navegador (Web Serial) | ✅ Funciona en la versión publicada (Chrome/Edge de computador) |
+| Interfaz «glass» adaptada a celulares | ✅ Barra inferior, monitor nítido en pantallas de alta densidad, controles táctiles de 44 px |
 | Señales reales de bases de datos (p. ej. MIT-BIH) | ⏳ Falta: comparar el detector con registros anotados |
 | Filtros de mayor orden / comparación IIR vs. FIR / variabilidad de la frecuencia cardíaca | ⏳ Falta |
 
@@ -46,7 +49,7 @@ Se estudia el **electrocardiograma (ECG)**: una señal bioeléctrica analógica,
 
 ## 5. Cómo ejecutar
 
-**Software:** Node.js ≥ 18 (probado con 22), Python 3.10 o superior, VS Code (opcional). Solo para usuarios e historial: XAMPP con MySQL. Solo para el sensor real: Arduino IDE.
+**Software:** Node.js ≥ 18 (probado con 22 y 24), Python 3.10 o superior, VS Code (opcional). Solo para usuarios e historial: XAMPP con MySQL. Solo para el sensor real: Arduino IDE (sketch [`arduino/ecg_plotter_teoria`](ecg-signal-simulator/arduino/)).
 
 **A. Análisis de señales en Python (no necesita nada más):**
 ```bash
@@ -63,9 +66,11 @@ cp ecg-signal-simulator/.env.example ecg-signal-simulator/.env     # Windows: Co
 npm start                                                          # abre http://localhost:3000
 ```
 
-**C. Solo el simulador, sin servidor ni base de datos:** abrir `ecg-signal-simulator/src/public/index.html` (por ejemplo con la extensión *Live Server* de VS Code). Funciona en «modo demostración».
+El Arduino IDE puede quedar abierto, pero **cierra su Serial Plotter / Monitor Serie** antes de `npm start`: un puerto USB lo usa un solo programa. La terminal muestra la dirección para abrir la página desde un celular en el mismo Wi-Fi.
 
-**D. Pruebas automáticas:** `npm test` (24 pruebas; 14 necesitan MySQL encendido). Solo las de procesamiento de señales: `cd ecg-signal-simulator && node --test tests/detector.test.js`.
+**C. Solo el simulador, sin servidor ni base de datos:** la página publicada en Vercel, o `ecg-signal-simulator/src/public/index.html` con *Live Server*. Funciona en «versión web»: simulador, filtros y Arduino por USB directo (Chrome/Edge).
+
+**D. Pruebas automáticas:** `npm test` (30 pruebas; las 9 de la API necesitan MySQL encendido). Solo las de procesamiento de señales: `cd ecg-signal-simulator && node --test tests/detector.test.js`.
 
 ## 6. Conceptos de Teoría de Señales utilizados hasta el momento
 
@@ -117,7 +122,7 @@ Señal de ejemplo: 75 lpm, fs = 250 Hz, 8 s (N = 2000), Δf = 0.125 Hz. Valores 
 ├── README.md                    ← este archivo
 ├── requirements.txt             ← dependencias de Python
 ├── .gitignore
-├── .github/workflows/pages.yml  ← publica la demo web en GitHub Pages
+├── vercel.json                  ← publica la demo web en Vercel (sitio estático)
 └── ecg-signal-simulator/
     ├── src/                     ← código principal (servidor Node.js y web)
     ├── data/                    ← muestra pequeña de ECG (JSON)
@@ -125,7 +130,7 @@ Señal de ejemplo: 75 lpm, fs = 250 Hz, 8 s (N = 2000), Δf = 0.125 Hz. Valores 
     ├── docs/                    ← teoría y presentación
     ├── scripts/                 ← análisis FFT (Python) y utilidades
     ├── tests/                   ← pruebas automáticas
-    ├── arduino/                 ← sketch para Arduino Uno + AD8232
+    ├── arduino/                 ← sketch ecg_plotter_teoria (Serial Plotter + página)
     └── database/                ← esquema SQL
 ```
 No se usan *notebooks* de Jupyter: el análisis está en un script de Python (`scripts/analisis_fft.py`).

@@ -36,7 +36,7 @@ Además de la simulación interactiva en el navegador, el repositorio incluye un
    # Abre XAMPP y pulsa "Start" en MySQL, luego:
    npm start
    ```
-   Al iniciar, el servidor abre automáticamente `http://localhost:3000` en el navegador predeterminado. La simulación y los filtros funcionan sin iniciar sesión; el Arduino y el historial requieren una cuenta (ver sección 5). Si abres `src/public/index.html` con Live Server (o publicas la carpeta `src/public` como sitio estático) funciona solo el **modo demostración**: simulador, filtros y análisis, sin sesión, Arduino ni historial (ver sección 6).
+   Al iniciar, el servidor abre automáticamente `http://localhost:3000` (o el `PORT` de tu `.env`) en el navegador predeterminado y muestra en la terminal la dirección para abrir la página **desde un celular conectado al mismo Wi-Fi**. La simulación y los filtros funcionan sin iniciar sesión; el Arduino por el servidor y el historial requieren una cuenta (ver sección 5). Si MySQL está apagado, el servidor arranca igual en «modo web» (simulador + Arduino por USB desde el navegador). Si abres `src/public/index.html` con Live Server, o en la versión publicada en Vercel (sección 6), funcionan el simulador, los filtros y la **conexión USB directa con el Arduino** (Chrome o Edge), sin sesión ni historial.
 
 2. **Ejecutar el script de Análisis de Frecuencia (FFT) y Filtrado Digital** (desde la carpeta `ecg-signal-simulator`):
    ```bash
@@ -79,8 +79,8 @@ En el espectro de magnitud $|X[k]|$ (ver `results/README_resultados.md`) se iden
 * `src/models/`: modelos Sequelize `Usuario`, `Medicion` y `ComandoLog`.
 * `src/routes/`: rutas `auth`, `arduino`, `mediciones` y `admin`.
 * `src/services/`: puente con el Arduino (`arduinoBridge.js`), transporte serial real y Arduino simulado.
-* `src/public/`: Aplicación frontend en HTML5 Canvas, CSS3 y JS Vanilla (`auth.js`, `arduinoLink.js`, `history.js`, `api.js` se añadieron en la v2.0). `signalProcessing.js` contiene los filtros y el detector Pan-Tompkins; `ecgGenerator.js`, el modelo sintético.
-* `arduino/ecg_serial/ecg_serial.ino`: sketch para Arduino Uno/Nano + AD8232.
+* `src/public/`: Aplicación frontend en HTML5 Canvas, CSS3 y JS Vanilla, con interfaz «glass» adaptada a celulares. `signalProcessing.js` contiene los filtros y el detector Pan-Tompkins; `ecgGenerator.js`, el modelo sintético; `renderer.js`, el monitor (nítido en pantallas de alta densidad); `arduinoLink.js`, el Arduino a través del servidor; `usbSerial.js`, el Arduino por USB directo desde el navegador (Web Serial).
+* `arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino`: sketch para Arduino Uno/Nano + AD8232. Sirve para el Serial Plotter del Arduino IDE **y** para la página (ver `arduino/README.md`).
 * `database/schema.sql`: esquema para importar desde phpMyAdmin.
 * `tests/`: pruebas automáticas (`npm test`): `detector.test.js` (DSP del navegador), `bridge.test.js` y `api.test.js`.
 * `.env.example`: plantilla de configuración.
@@ -94,6 +94,8 @@ En el espectro de magnitud $|X[k]|$ (ver `results/README_resultados.md`) se iden
 ## 5. Versión 2.0: Arduino, MySQL y usuarios
 
 > **Suposición documentada:** el proyecto usa una simulación educativa y permite capturar señal real con un Arduino Uno/Nano y módulo ECG AD8232 conectado por USB (comunicación serial a 115200 baudios).
+>
+> **Dos formas de conectar el Arduino:** (1) **por el servidor** (`npm start`): el servidor lee el puerto y reparte la señal a todos los navegadores, incluidos celulares en el mismo Wi-Fi; (2) **por USB directo desde el navegador** (Chrome/Edge, botón «Conectar Arduino»): no necesita servidor y funciona en la página publicada en Vercel. Solo un programa puede usar el puerto a la vez.
 
 ### 5.1. Arquitectura
 
@@ -128,15 +130,15 @@ En el espectro de magnitud $|X[k]|$ (ver `results/README_resultados.md`) se iden
 4. **Validar Sequelize:** `npm run db:check` debe mostrar ✔ para las tres tablas.
 5. **Arduino (opcional):**
    1. Arma el circuito de `arduino/README.md`.
-   2. Abre `arduino/ecg_serial/ecg_serial.ino` en el Arduino IDE y súbelo a la placa (Uno/Nano, 115200 baudios en el Monitor Serie para verificar).
-   3. Ejecuta `npm run puertos` y verifica cuál de los puertos corresponde a la placa. En Windows, COM3/COM4 pueden ser puertos Bluetooth virtuales; no los elijas a menos que el Arduino IDE los muestre para la placa.
-   4. Pon el puerto verificado en `ARDUINO_PORT` y `ARDUINO_MODE=serial` en `.env`. Cierra el Monitor Serie del IDE (solo un programa puede usar el puerto).
+   2. Abre `arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino` en el Arduino IDE y súbelo a la placa (Uno/Nano). Para verificar, abre el Serial Plotter a **115200** baudios: verás la onda con la derivación en la leyenda.
+   3. Deja `ARDUINO_MODE=serial` y `ARDUINO_PORT=auto` en `.env` (valores por defecto): el servidor encuentra la placa solo e ignora los puertos Bluetooth virtuales (COM3/COM4). `npm run puertos` muestra cuál eligió.
+   4. **Cierra el Serial Plotter / Monitor Serie** (el Arduino IDE puede seguir abierto): en Windows solo un programa puede usar el puerto. Si está ocupado, la página lo dice y el servidor reintenta cada 3 s hasta que lo cierres.
 6. **Iniciar:** `npm start` y abre `http://localhost:3000`.
 7. **Crear cuenta:** botón **Crear cuenta** (el primer usuario queda como administrador). También por terminal:
    ```bash
    npm run usuario -- "Nombre Apellido" correo@ejemplo.com Clave1234 admin
    ```
-8. **Usar el Arduino:** inicia sesión → tarjeta **Arduino** → **Usar señal del Arduino**. Sin hardware, el modo `simulate` emula un Arduino con el mismo protocolo.
+8. **Usar el Arduino:** inicia sesión → el monitor cambia solo a la señal del Arduino en cuanto se conecta (o pulsa **Usar señal del Arduino**). El servidor envía `WEB` al sketch y este pasa del formato del Plotter al protocolo completo a 250 Hz. Para **subir un sketch nuevo sin cerrar `npm start`**, pulsa **Liberar puerto**, carga desde el IDE y luego **Reconectar**. Sin hardware, `ARDUINO_MODE=simulate` emula un Arduino con el mismo protocolo.
 
 ### 5.3. Protocolo serial
 
@@ -144,12 +146,18 @@ Líneas de texto terminadas en `\n`.
 
 | Dirección | Mensaje | Significado |
 |-----------|---------|-------------|
-| Arduino → PC | `I,ECG_ARDUINO,1.0,fs=250` | Anuncio al arrancar |
+| Arduino → PC | `II:123,FC:72,Cero:0` | Modo gráfica (Serial Plotter, 40 puntos/s): onda filtrada, FC y línea de cero |
+| PC → Arduino | `WEB` | Pide el protocolo completo (lo envían el servidor y la página solos) |
+| Arduino → PC | `I,ECG_PLOTTER_TEORIA,2.0,fs=250` | Anuncio del modo web |
 | Arduino → PC | `S,<adc>` | Muestra del ECG (0–1023) a `fs` Hz |
 | Arduino → PC | `H,<bpm>` | Frecuencia cardíaca calculada a bordo |
+| Arduino → PC | `R,<rr ms>,<QRS cmV>,<1\|0>` | Intervalo RR, amplitud del QRS (centésimas de mV) y ritmo regular/irregular |
+| Arduino → PC | `D,<derivación>` | Derivación que se está midiendo (I, II, III, AVR, AVL, AVF, V1–V6) |
 | Arduino → PC | `L,<0\|1>` | 1 = electrodo suelto |
 | Arduino → PC | `A,<CMD>,<OK\|ERR>[,info]` | Confirmación de comando |
-| PC → Arduino | `PING`, `START`, `STOP`, `LED,<0\|1>`, `FS,<125\|250\|500>` | Comandos permitidos (lista cerrada) |
+| PC → Arduino | `PING`, `START`, `STOP`, `LED,<0\|1>`, `FS,<125\|250\|500>`, `DER,<derivación>`, `P` | Comandos permitidos (lista cerrada; `P` vuelve al modo gráfica) |
+
+Si el sketch no entiende `WEB` (por ejemplo, una versión anterior), la página sigue funcionando con el formato del Plotter; y si no llega nada legible en 5 s, prueba 115200 y 9600 baudios.
 
 **Conversión a mV:** el servidor resta la componente continua con un promedio móvil exponencial (τ ≈ 1,5 s, equivale a un pasa-altas muy suave) y divide por `ARDUINO_COUNTS_PER_MV` (≈ 225 para AD8232 con referencia de 5 V). Ajusta ese valor si la señal se ve muy grande o pequeña.
 
@@ -161,6 +169,7 @@ Líneas de texto terminadas en `\n`.
 | `POST /api/auth/login` · `POST /api/auth/logout` · `GET /api/auth/yo` | público / sesión | Sesión con cookie `httpOnly` (JWT) |
 | `GET /api/arduino/status` | sesión | Estado del Arduino |
 | `POST /api/arduino/comando` | sesión | `{ "comando": "LED", "valor": 1 }` (espera el ACK) |
+| `POST /api/arduino/puerto` | sesión | `{ "accion": "liberar" \| "conectar" }`: suelta el USB para subir un sketch y lo vuelve a abrir |
 | `GET /api/arduino/stream` | sesión | Flujo SSE: `samples`, `bpm`, `status` |
 | `GET /api/arduino/comandos` | sesión | Últimos comandos propios |
 | `POST/GET/DELETE /api/mediciones`, `GET /api/mediciones/resumen` | sesión | Historial de BPM del usuario |
@@ -183,7 +192,7 @@ Automáticas (requieren MySQL de XAMPP encendido; usan la base aparte `arduino_e
 npm test
 ```
 
-Cubren 24 casos: protocolo del puente, comandos válidos e inválidos, registro, login, inyección SQL, hash bcrypt, permisos admin, SSE, historial y logout (14, con MySQL) y, en `tests/detector.test.js` (10, sin MySQL), el detector de latidos (precisión de ±2 lpm entre 40 y 180 lpm; ±3 lpm con ruido, red de 60 Hz y deriva), la continuidad de fase del generador y la respuesta en frecuencia de los filtros.
+Cubren 30 casos: protocolo del puente (incluidos el formato del Serial Plotter, el cambio a modo web, las líneas `R`/`D`, la detección automática del puerto y liberar/reconectar), comandos válidos e inválidos, registro, login, inyección SQL, hash bcrypt, permisos admin, SSE, historial y logout (20; los 9 de la API necesitan MySQL) y, en `tests/detector.test.js` (10, sin MySQL), el detector de latidos (precisión de ±2 lpm entre 40 y 180 lpm; ±3 lpm con ruido, red de 60 Hz y deriva), la continuidad de fase del generador y la respuesta en frecuencia de los filtros.
 
 Lista de verificación manual:
 
@@ -204,20 +213,30 @@ Lista de verificación manual:
 |---------|----------------|
 | `No se pudo conectar a MySQL` | MySQL no está en *Start* en XAMPP, o `DB_*` incorrectos |
 | `Access denied for user 'root'` | Cambiaste la contraseña de root: ponla en `DB_PASSWORD` |
-| `Opening COM3: Access denied` | El Monitor Serie del IDE u otro programa usa el puerto |
-| `File not found` en el puerto | `ARDUINO_PORT` incorrecto: ejecuta `npm run puertos` |
+| «El puerto COMx está ocupado» | El Serial Plotter / Monitor Serie del IDE (u otra pestaña con «Conectar Arduino») usa el puerto: ciérralo; el servidor reconecta solo |
+| «No se encontró ningún Arduino» | Cable solo de carga, placa sin conectar o driver CH340 sin instalar. `npm run puertos` lo confirma |
+| El IDE no puede subir el sketch | `npm start` tiene el puerto: pulsa **Liberar puerto** en la página (o cierra el servidor) |
+| «No llegan datos legibles…» | El sketch usa otra velocidad: escribe `0` en el Monitor Serie para volver a 115200 |
 | Señal enorme o diminuta | Ajusta `ARDUINO_COUNTS_PER_MV` |
-| Puerto 3000 ocupado | Cambia `PORT` en `.env` |
+| Puerto 3000 ocupado | Ya hay un `npm start` abierto en otra terminal, o cambia `PORT` en `.env` |
 
 > **Aviso:** el sistema con Arduino sigue siendo **educativo**; no es un dispositivo médico, no sirve para diagnóstico y no debe usarse para decisiones de salud.
 
 ---
 
-## 6. Versión web de demostración (cualquier celular o computador)
+## 6. Versión web publicada en Vercel (cualquier celular o computador)
 
-El simulador (generador de ECG, ruido, filtros, FFT teórica, detector de latidos y BPM) es 100 % JavaScript del lado del navegador, así que se publica como **sitio estático** en GitHub Pages sin servidor:
+El simulador (generador de ECG, ruido, filtros, detector de latidos y BPM) es 100 % JavaScript del lado del navegador, así que se publica gratis como **sitio estático** en [Vercel](https://vercel.com). La configuración ya está en `vercel.json` (raíz del repositorio): publica `ecg-signal-simulator/src/public`, sin compilar nada, con cabeceras de seguridad.
 
-* El flujo de trabajo `.github/workflows/pages.yml` (en la raíz del repositorio) publica `ecg-signal-simulator/src/public` en cada `git push` a `main`.
-* Una sola vez, en GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-* La dirección queda en `https://<usuario>.github.io/<repositorio>/`. Se abre desde un celular sin instalar nada.
-* En esa versión la página detecta que no hay API (`/api/auth/yo` no responde) y entra en **modo demostración**: oculta inicio de sesión, Arduino e historial y muestra un aviso. Esas funciones requieren Node.js + MySQL + el Arduino conectado por USB al computador, por lo que no se pueden publicar en un hosting estático.
+**Publicarlo (una sola vez, unos 2 minutos):**
+
+1. Entra a <https://vercel.com/new> y elige **Continue with GitHub** (cuenta gratuita *Hobby*).
+2. Autoriza a Vercel a leer el repositorio `teoria_de_senales_ecg_arduino` e impórtalo con **Import**.
+3. No cambies nada (Vercel lee `vercel.json`) y pulsa **Deploy**. Obtendrás un enlace `https://<nombre>.vercel.app` que cualquiera puede abrir.
+4. Cada `git push` a `main` actualiza la página sola.
+
+**Qué funciona en la versión publicada:**
+
+* Simulador, ruido, filtros, detector de latidos y teoría, en cualquier celular o computador.
+* **Arduino en vivo por USB** en Chrome o Edge de computador: conecta la placa a ese computador y pulsa **Conectar Arduino** (Web Serial; requiere HTTPS, que Vercel ya da). Safari y Firefox no tienen Web Serial.
+* Inicio de sesión, historial (MySQL) y la conexión del Arduino a través del servidor solo existen con `npm start`: la base de datos de XAMPP está en tu computador y no es accesible desde Internet. La página lo detecta (`/api/config` no responde) y muestra un aviso.

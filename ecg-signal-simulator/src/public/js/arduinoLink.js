@@ -1,17 +1,23 @@
 // ============================================================
-// Enlace en tiempo real con el Arduino a través del servidor:
+// Enlace en tiempo real con el Arduino a través del servidor (npm start):
 //  - EventSource (SSE) recibe muestras, BPM y estado
 //  - POST /api/arduino/comando envía comandos
+//  - POST /api/arduino/puerto libera el USB (para subir un sketch) o reconecta
 // Todo el estado queda sincronizado entre pestañas/usuarios
 // porque el servidor transmite los mismos eventos a todos.
 // ============================================================
 const ArduinoLink = {
+    nombre: 'servidor',
+    etiqueta: 'ECG real · Arduino (servidor)',
     active: false,      // true = el monitor dibuja la señal del Arduino
     fs: 250,
     bpm: null,
     queue: [],
     stream: null,
     estado: null,
+    ultimaMuestra: 0,
+    estabaConectado: false,
+    servidorCaido: false,
 
     // app.js llama a drain() en cada ciclo para recoger las muestras pendientes
     drain() {
@@ -25,26 +31,33 @@ const ArduinoLink = {
         this.el = {
             lock: $('arduinoLock'), panel: $('arduinoPanel'), status: $('arduinoStatus'),
             device: $('adDevice'), port: $('adPort'), fs: $('adFs'), bpm: $('adBpm'), leads: $('adLeads'),
-            use: $('btnArduinoUse'), ping: $('btnArduinoPing'),
+            use: $('btnArduinoUse'), ping: $('btnArduinoPing'), puerto: $('btnArduinoPort'),
             led: $('chkArduinoLed'), streamChk: $('chkArduinoStream'), selFs: $('selArduinoFs'),
+            der: $('adDer'), ritmo: $('adRitmo'), selDer: $('selArduinoDer'),
             log: $('arduinoLog'),
         };
 
-        this.el.use.addEventListener('click', () => this.alternarUso());
+        this.el.use.addEventListener('click', () => this.fijarActivo(!this.active));
         this.el.ping.addEventListener('click', () => this.comando('PING'));
+        this.el.puerto.addEventListener('click', () => this.alternarPuerto());
         this.el.led.addEventListener('change', () => this.comando('LED', this.el.led.checked ? 1 : 0));
         this.el.streamChk.addEventListener('change', () => this.comando(this.el.streamChk.checked ? 'START' : 'STOP'));
         this.el.selFs.addEventListener('change', () => this.comando('FS', this.el.selFs.value));
+        this.el.selDer.addEventListener('change', () => this.comando('DER', this.el.selDer.value));
 
         document.addEventListener('auth:change', (e) => (e.detail ? this.conectar() : this.desconectar()));
+        document.addEventListener('fuente:activa', (e) => {
+            if (e.detail !== this.nombre && this.active) this.fijarActivo(false, false);
+        });
     },
 
-    alternarUso() {
-        this.active = !this.active;
+    fijarActivo(activo, avisar = true) {
+        this.active = activo;
         this.queue = [];
-        this.el.use.textContent = this.active ? 'Volver a la simulación' : 'Usar señal del Arduino';
-        this.el.use.classList.toggle('btn-disconnect', this.active);
-        this.el.use.classList.toggle('btn-connect', !this.active);
+        this.el.use.textContent = activo ? 'Volver a la simulación' : 'Usar señal del Arduino';
+        this.el.use.classList.toggle('btn-disconnect', activo);
+        this.el.use.classList.toggle('btn-connect', !activo);
+        if (activo && avisar) document.dispatchEvent(new CustomEvent('fuente:activa', { detail: this.nombre }));
     },
 
     conectar() {
@@ -56,6 +69,7 @@ const ArduinoLink = {
         this.stream.addEventListener('samples', (e) => {
             const d = JSON.parse(e.data);
             this.fs = d.fs || this.fs;
+            this.ultimaMuestra = Date.now();
             if (this.active) {
                 this.queue.push(...d.samples);
                 if (this.queue.length > 5000) this.queue.splice(0, this.queue.length - 5000);
@@ -65,10 +79,14 @@ const ArduinoLink = {
             this.bpm = JSON.parse(e.data).bpm;
             this.el.bpm.textContent = `${this.bpm} lpm`;
         });
-        this.stream.addEventListener('status', (e) => this.mostrarEstado(JSON.parse(e.data)));
+        this.stream.addEventListener('status', (e) => {
+            this.servidorCaido = false;
+            this.mostrarEstado(JSON.parse(e.data));
+        });
         this.stream.onerror = () => {
             // EventSource reintenta solo; si la sesión expiró el servidor responde 401
-            this.fijarEstadoTexto('Sin conexión con el servidor. Reintentando…', 'error');
+            this.servidorCaido = true;
+            this.fijarEstadoTexto('Sin conexión con el servidor. ¿Sigue abierta la terminal con npm start? Reintentando…', 'error');
             this.habilitar(false);
         };
     },
@@ -76,8 +94,9 @@ const ArduinoLink = {
     desconectar() {
         if (this.stream) this.stream.close();
         this.stream = null;
-        if (this.active) this.alternarUso();
+        if (this.active) this.fijarActivo(false);
         this.bpm = null;
+        this.estabaConectado = false;
         this.el.lock.hidden = false;
         this.el.panel.hidden = true;
         this.el.log.replaceChildren();
@@ -87,34 +106,82 @@ const ArduinoLink = {
         this.el.status.textContent = texto;
         this.el.status.classList.toggle('connected', clase === 'connected');
         this.el.status.classList.toggle('error', clase === 'error');
+        this.el.status.classList.toggle('warn', clase === 'warn');
     },
 
     habilitar(conectado) {
-        for (const c of [this.el.use, this.el.ping, this.el.led, this.el.streamChk, this.el.selFs]) c.disabled = !conectado;
+        for (const c of [this.el.use, this.el.ping, this.el.led, this.el.streamChk, this.el.selFs, this.el.selDer]) c.disabled = !conectado;
     },
 
     mostrarEstado(e) {
         this.estado = e;
         this.fs = e.fs || this.fs;
         this.habilitar(e.conectado);
-        if (e.conectado) {
-            this.fijarEstadoTexto(
-                e.modo === 'simulate' ? 'Conectado a un Arduino simulado (modo de pruebas).' : 'Arduino conectado.',
-                'connected'
-            );
+        this.el.puerto.disabled = false;
+        this.el.puerto.textContent = e.liberado ? 'Reconectar' : 'Liberar puerto';
+        this.el.puerto.classList.toggle('btn-connect', e.liberado);
+
+        const real = e.modo === 'serial';
+        if (e.liberado) {
+            this.fijarEstadoTexto('Puerto liberado: ya puedes subir el sketch desde el Arduino IDE. Luego pulsa «Reconectar».', 'warn');
+        } else if (!e.conectado) {
+            this.fijarEstadoTexto(`Arduino desconectado${e.error ? `: ${e.error}` : ''}. Reintentando cada 3 s…`, 'error');
+        } else if (e.sinDatos) {
+            this.fijarEstadoTexto('El puerto está abierto pero no llegan datos. Revisa que el sketch sea ecg_plotter_teoria.ino y que ARDUINO_BAUD=115200.', 'warn');
+        } else if (e.derivacionesSueltas) {
+            this.fijarEstadoTexto('Arduino conectado, pero hay electrodos sueltos (RA, LA, RL).', 'warn');
+        } else if (e.formato === 'plotter') {
+            this.fijarEstadoTexto(`Recibiendo el formato del Serial Plotter (${e.fs} puntos/s, ${e.baudios} baudios). Sube la versión del proyecto de ecg_plotter_teoria.ino para ver la onda completa a 250 Hz.`, 'connected');
+        } else if (e.formato === 'numeros') {
+            this.fijarEstadoTexto('Recibiendo datos de un sketch genérico (sin comandos). Para todas las funciones sube ecg_plotter_teoria.ino.', 'connected');
         } else {
-            this.fijarEstadoTexto(`Arduino desconectado${e.error ? `: ${e.error}` : ''}. Reintentando…`, 'error');
+            this.fijarEstadoTexto(real ? 'Arduino conectado: recibiendo el ECG en tiempo real.' : 'Conectado a un Arduino simulado (ARDUINO_MODE=simulate).', 'connected');
         }
+
+        // Al conectarse un Arduino real, el monitor cambia solo a su señal (se puede volver a la simulación)
+        if (real && e.conectado && !this.estabaConectado && !this.active) this.fijarActivo(true);
+        this.estabaConectado = e.conectado;
+
         this.el.device.textContent = e.dispositivo || '—';
-        this.el.port.textContent = e.modo === 'simulate' ? 'Simulado' : e.puerto;
+        this.el.port.textContent = real ? `${e.puerto}${e.baudios ? ` · ${e.baudios} baud` : ''}` : 'Simulado';
+        this.el.der.textContent = e.derivacion || '—';
+        this.el.ritmo.textContent = e.rr
+            ? `${e.ritmoRegular ? 'Regular' : 'Irregular'} · ${e.qrsMv !== null ? `${e.qrsMv.toFixed(2)} mV` : '—'}`
+            : '—';
+        if (e.derivacion) this.el.selDer.value = e.derivacion;
         this.el.fs.textContent = `${e.fs} Hz`;
         this.el.bpm.textContent = e.bpm ? `${e.bpm} lpm` : '—';
-        this.el.leads.textContent = e.derivacionesSueltas ? '⚠ Sueltos' : 'OK';
+        this.el.leads.textContent = !e.conectado ? '—' : e.derivacionesSueltas ? '⚠ Sueltos' : 'OK';
         this.el.leads.classList.toggle('warn', e.derivacionesSueltas);
         // Sincroniza los controles con lo que realmente confirmó el Arduino
         this.el.led.checked = e.led === 1;
         this.el.streamChk.checked = e.transmitiendo;
         this.el.selFs.value = String(e.fs);
+    },
+
+    estadoSenal() {
+        const e = this.estado;
+        if (this.servidorCaido || !e) return { texto: 'SIN SERVIDOR', clase: 'error' };
+        if (e.liberado) return { texto: 'PUERTO LIBRE', clase: 'warn' };
+        if (!e.conectado) return { texto: 'DESCONECTADO', clase: 'error' };
+        if (e.derivacionesSueltas) return { texto: 'ELECTRODOS', clase: 'warn' };
+        if (Date.now() - this.ultimaMuestra > 2500) return { texto: 'SIN DATOS', clase: 'warn' };
+        return { texto: 'EN VIVO', clase: 'live' };
+    },
+
+    async alternarPuerto() {
+        const accion = this.estado && this.estado.liberado ? 'conectar' : 'liberar';
+        this.el.puerto.disabled = true;
+        let resultado;
+        try {
+            const r = await API.post('/api/arduino/puerto', { accion });
+            resultado = { ok: true, info: r.info };
+            this.mostrarEstado(r.estado);
+        } catch (err) {
+            resultado = { ok: false, info: err.data && err.data.info ? err.data.info : err.message };
+            this.el.puerto.disabled = false;
+        }
+        this.registrar('PUERTO', accion, resultado);
     },
 
     async comando(comando, valor) {

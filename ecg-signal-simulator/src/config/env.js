@@ -33,8 +33,8 @@ module.exports = {
   },
   cookieSecure: bool(process.env.COOKIE_SECURE, false),
   arduino: {
-    mode: (process.env.ARDUINO_MODE || 'simulate').toLowerCase(), // 'serial' | 'simulate'
-    port: process.env.ARDUINO_PORT || 'COM3',
+    mode: (process.env.ARDUINO_MODE || 'serial').toLowerCase(), // 'serial' | 'simulate'
+    port: process.env.ARDUINO_PORT || 'auto', // 'auto' busca la placa por USB
     baud: num(process.env.ARDUINO_BAUD, 115200),
     countsPerMv: num(process.env.ARDUINO_COUNTS_PER_MV, 225),
     fs: num(process.env.ARDUINO_FS, 250),

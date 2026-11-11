@@ -1,6 +1,6 @@
 // ============================================================
 // Arduino simulado: habla EXACTAMENTE el mismo protocolo serial
-// que el sketch real (arduino/ecg_serial/ecg_serial.ino), así el
+// que el sketch real (arduino/ecg_plotter_teoria/ecg_plotter_teoria.ino en modo web), así el
 // resto del sistema no distingue entre hardware y simulación.
 // ============================================================
 const EventEmitter = require('events');

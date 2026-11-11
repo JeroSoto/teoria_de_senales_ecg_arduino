@@ -1,0 +1,12 @@
+# Solo se publica ecg-signal-simulator/src/public (ver vercel.json).
+# Esto evita subir credenciales o archivos pesados si se despliega con la CLI (npx vercel).
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+.vscode
+.claude
+ecg-signal-simulator/docs/*.pdf
+ecg-signal-simulator/results
+ecg-signal-simulator/database
+ecg-signal-simulator/tests

@@ -29,6 +29,27 @@ module.exports = function crearRutasArduino(bridge) {
     }
   });
 
+  // Libera el puerto USB (para que el Arduino IDE pueda subir un sketch) o lo vuelve a abrir
+  router.post('/puerto', async (req, res, next) => {
+    try {
+      const accion = String((req.body && req.body.accion) || '');
+      if (!['liberar', 'conectar'].includes(accion)) {
+        return res.status(400).json({ ok: false, info: 'accion debe ser "liberar" o "conectar".' });
+      }
+      const estado = accion === 'liberar' ? bridge.liberarPuerto() : bridge.reconectar();
+      await ComandoLog.create({
+        usuarioId: req.usuario.id,
+        comando: 'PUERTO',
+        valor: accion,
+        exito: true,
+        respuesta: accion === 'liberar' ? 'puerto liberado' : 'reconectando',
+      });
+      res.json({ ok: true, info: accion === 'liberar' ? 'Puerto liberado.' : 'Reconectando…', estado });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get('/comandos', async (req, res, next) => {
     try {
       const filas = await ComandoLog.findAll({

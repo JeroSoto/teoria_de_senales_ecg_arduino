@@ -16,20 +16,42 @@ const Auth = {
         this.btnSwitch.addEventListener('click', () => this.cambiarModo(this.modo === 'login' ? 'registro' : 'login'));
         this.form.addEventListener('submit', (e) => { e.preventDefault(); this.enviar(); });
 
-        // Restaura la sesión si la cookie sigue vigente
-        API.get('/api/auth/yo')
-            .then((r) => this.fijarUsuario(r.usuario))
-            .catch((err) => {
-                // Con el servidor activo, "no hay sesión" responde 401. Sin servidor (GitHub Pages, Live Server o
-                // abrir el archivo directamente) la petición falla o devuelve 404/405: se activa el modo demostración.
-                if (!err.status || err.status === 404 || err.status === 405) this.modoDemo();
-                this.fijarUsuario(null);
-            });
+        this.detectarModo();
     },
 
-    /** Sin servidor solo funciona el simulador: se ocultan sesión, Arduino e historial. */
-    modoDemo() {
-        document.body.classList.add('modo-demo');
+    /**
+     * ¿Dónde se está ejecutando la página?
+     *   servidor → npm start con MySQL: sesión, historial y Arduino por el servidor.
+     *   sin-bd   → npm start con MySQL apagado: simulador + Arduino por USB desde el navegador.
+     *   web      → sitio estático (Vercel, Live Server, archivo local): simulador + Arduino por USB.
+     */
+    async detectarModo() {
+        let config = null;
+        try { config = await API.get('/api/config'); } catch { /* sin servidor */ }
+        const modo = !config || !config.servidor ? 'web' : config.baseDeDatos === false ? 'sin-bd' : 'servidor';
+        window.ECGModo = { modo, arduino: config && config.arduino ? config.arduino.modo : 'ninguno' };
+        document.body.dataset.modo = modo;
+        document.dispatchEvent(new CustomEvent('modo:listo', { detail: window.ECGModo }));
+
+        if (modo !== 'servidor') {
+            this.mostrarAviso(modo);
+            this.fijarUsuario(null);
+            return;
+        }
+        // Restaura la sesión si la cookie sigue vigente (sin sesión el servidor responde 401)
+        API.get('/api/auth/yo')
+            .then((r) => this.fijarUsuario(r.usuario))
+            .catch(() => this.fijarUsuario(null));
+    },
+
+    mostrarAviso(modo) {
+        const textos = {
+            web: ['Versión web.', 'Simulador, filtros y análisis funcionan en cualquier celular. Para ver tu Arduino en vivo, conéctalo por USB a este computador y usa «Conectar Arduino» (Chrome o Edge). Sesión e historial solo con npm start.'],
+            'sin-bd': ['MySQL está apagado.', 'Abre XAMPP, pulsa «Start» en MySQL y recarga para usar sesión e historial. Mientras tanto puedes conectar el Arduino por USB desde el navegador.'],
+        };
+        const [titulo, texto] = textos[modo];
+        document.getElementById('demoTitle').textContent = titulo;
+        document.getElementById('demoText').textContent = texto;
         document.getElementById('demoBanner').hidden = false;
     },
 

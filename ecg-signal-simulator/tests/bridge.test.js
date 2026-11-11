@@ -80,3 +80,83 @@ test('el analizador de líneas ignora basura y detecta electrodos sueltos', asyn
   bridge._procesarLinea('L,0');
   assert.equal(bridge.getEstado().derivacionesSueltas, false);
 });
+
+test('entiende el modo gráfica de ecg_plotter_teoria.ino y le pide el modo web', () => {
+  const bridge = new ArduinoBridge(config);
+  const escritos = [];
+  bridge.transporte = { write: (l) => escritos.push(l) };
+  bridge._procesarLinea('II:123,FC:72,Cero:0');
+  const e = bridge.getEstado();
+  assert.equal(e.formato, 'plotter');
+  assert.equal(e.derivacion, 'II');
+  assert.equal(e.bpm, 72);
+  assert.deepEqual(escritos, ['WEB'], 'debe pedir el protocolo completo');
+  assert.equal(bridge.lote.length, 1);
+  bridge._procesarLinea('SUELTO:0,FC:0,Cero:0');
+  assert.equal(bridge.getEstado().derivacionesSueltas, true);
+});
+
+test('lee derivación, ritmo y amplitud del QRS del sketch en modo web', () => {
+  const bridge = new ArduinoBridge(config);
+  bridge._procesarLinea('I,ECG_PLOTTER_TEORIA,2.0,fs=250');
+  bridge._procesarLinea('D,V2');
+  bridge._procesarLinea('R,820,105,1');
+  const e = bridge.getEstado();
+  assert.equal(e.formato, 'protocolo');
+  assert.equal(e.fs, 250);
+  assert.equal(e.derivacion, 'V2');
+  assert.equal(e.rr, 820);
+  assert.equal(e.qrsMv, 1.05);
+  assert.equal(e.ritmoRegular, true);
+  bridge._procesarLinea('D,XX'); // derivación inexistente: se ignora
+  assert.equal(bridge.getEstado().derivacion, 'V2');
+});
+
+test('las líneas basura no cuentan como datos (sirve para detectar baudios incorrectos)', () => {
+  const bridge = new ArduinoBridge(config);
+  bridge._procesarLinea('\u00ff\u00fe?x');
+  bridge._procesarLinea('S,abc');
+  assert.equal(bridge.validas, 0);
+  bridge._procesarLinea('S,512');
+  assert.equal(bridge.validas, 1);
+});
+
+test('DER se valida y se normaliza a mayúsculas', async () => {
+  const bridge = new ArduinoBridge(config);
+  bridge.estado.conectado = true;
+  bridge.estado.formato = 'protocolo';
+  let enviado = null;
+  bridge.transporte = { write: (l) => { enviado = l; setImmediate(() => bridge._procesarLinea('A,DER,OK,AVF')); } };
+  assert.equal((await bridge.enviarComando('DER', 'X9')).ok, false);
+  const r = await bridge.enviarComando('der', 'avf');
+  assert.equal(enviado, 'DER,AVF');
+  assert.equal(r.ok, true);
+  assert.equal(bridge.getEstado().derivacion, 'AVF');
+});
+
+test('liberar el puerto detiene los reintentos y reconectar vuelve a abrirlo', async () => {
+  const bridge = new ArduinoBridge(config);
+  bridge.iniciar();
+  try {
+    await esperar(bridge, 'samples');
+    const libre = bridge.liberarPuerto();
+    assert.equal(libre.liberado, true);
+    assert.equal(libre.conectado, false);
+    assert.equal(bridge.transporte, null);
+    bridge.reconectar();
+    await esperar(bridge, 'samples');
+    assert.equal(bridge.getEstado().conectado, true);
+    assert.equal(bridge.getEstado().liberado, false);
+  } finally {
+    bridge.detener();
+  }
+});
+
+test('ARDUINO_PORT=auto elige la placa USB e ignora los puertos Bluetooth', () => {
+  const { elegirPuertoArduino } = require('../src/services/serialTransport');
+  const bt = { path: 'COM3', manufacturer: 'Microsoft', pnpId: 'BTHENUM\{00001101}', friendlyName: 'Serie estándar sobre el vínculo Bluetooth (COM3)' };
+  assert.equal(elegirPuertoArduino([bt]), null);
+  assert.equal(elegirPuertoArduino([bt, { path: 'COM7', vendorId: '2341', productId: '0043' }]).path, 'COM7');
+  assert.equal(elegirPuertoArduino([bt, { path: 'COM9', vendorId: '1A86', productId: '7523' }]).descripcion, 'CH340 (clon)');
+  assert.equal(elegirPuertoArduino([{ path: '/dev/ttyUSB0', manufacturer: 'FTDI' }]).path, '/dev/ttyUSB0');
+});

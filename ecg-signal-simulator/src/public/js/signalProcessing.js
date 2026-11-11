@@ -170,8 +170,11 @@ class SignalProcessor {
     }
 
     processSample(sample, currentTime) {
-        // La detección usa la señal sin filtrar por el usuario: así no depende de qué botones estén activos
-        this.detectRPeak(sample);
+        // La detección usa la señal sin filtrar por el usuario: así no depende de qué botones estén activos.
+        // Con menos de 100 Hz (p. ej. el formato del Serial Plotter, 40 puntos/s) el pasa-banda de 5–15 Hz
+        // no cabe bajo Nyquist: en ese caso se usa la frecuencia cardíaca que calcula el Arduino.
+        if (this.fs >= 100) this.detectRPeak(sample);
+        else this.detectedBPM = null;
 
         let output = sample;
 

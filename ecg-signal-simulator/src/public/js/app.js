@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fs = 250;
     const generator = new ECGGenerator(fs);
     const processor = new SignalProcessor(fs);
-    const renderer = new ECGRenderer('ecgCanvas');
+    const renderer = new ECGRenderer('ecgCanvas', { fs });
 
     let isRunning = true;
     let currentTime = 0;
@@ -15,90 +15,92 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastFrame = null;
     let sampleDebt = 0;           // muestras pendientes de generar (parte fraccionaria incluida)
 
-    const bpmSlider = document.getElementById('bpmSlider');
-    const bpmVal = document.getElementById('bpmVal');
-    const ampSlider = document.getElementById('ampSlider');
-    const ampVal = document.getElementById('ampVal');
-    const noiseSlider = document.getElementById('noiseSlider');
-    const noiseVal = document.getElementById('noiseVal');
+    const $ = (id) => document.getElementById(id);
+    const bpmSlider = $('bpmSlider');
+    const bpmVal = $('bpmVal');
+    const ampSlider = $('ampSlider');
+    const ampVal = $('ampVal');
+    const noiseSlider = $('noiseSlider');
+    const noiseVal = $('noiseVal');
+    const humCheck = $('humCheck');
+    const wanderCheck = $('wanderCheck');
+    const btnHP = $('btnHighPass');
+    const btnLP = $('btnLowPass');
+    const btnNotch = $('btnNotch');
+    const btnPlay = $('btnTogglePlay');
+    const bpmDisplay = $('bpmDisplay');
+    const freqDisplay = $('freqDisplay');
+    const rrDisplay = $('rrDisplay');
+    const filterStatus = $('filterStatus');
+    const signalHeading = $('signalHeading');
+    const statusPill = $('statusPill');
+    const statusText = $('text-status');
+    const signalNotice = $('signalNotice');
+    const simControls = $('simulationControls');
+    const AVISO_SIMULACION = signalNotice.textContent.trim();
 
-    const humCheck = document.getElementById('humCheck');
-    const wanderCheck = document.getElementById('wanderCheck');
-
-    const btnHP = document.getElementById('btnHighPass');
-    const btnLP = document.getElementById('btnLowPass');
-    const btnNotch = document.getElementById('btnNotch');
-    const btnPlay = document.getElementById('btnTogglePlay');
-    const bpmDisplay = document.getElementById('bpmDisplay');
-    const freqDisplay = document.getElementById('freqDisplay');
-    const rrDisplay = document.getElementById('rrDisplay');
-    const filterStatus = document.getElementById('filterStatus');
-    const signalHeading = document.getElementById('signalHeading');
-    const statusIndicator = document.getElementById('text-status');
-
-    let lastArduinoOn = false;
-    let lastBpm = null;          // null = aún no hay una medición válida
-    let lastSource = 'simulado';
+    let lastSource = null;        // objeto de la fuente activa (UsbSerial, ArduinoLink) o null = simulación
+    let lastBpm = null;           // null = aún no hay una medición válida
+    let lastSourceName = 'simulado';
 
     // Permite que el historial (history.js) consulte la lectura actual
-    window.ECGApp = { getState: () => ({ bpm: lastBpm, fuente: lastSource }) };
+    window.ECGApp = { getState: () => ({ bpm: lastBpm, fuente: lastSourceName }) };
 
     bpmSlider.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value);
+        const val = parseInt(e.target.value, 10);
         generator.bpm = val;
         bpmVal.textContent = val;
     });
-
     ampSlider.addEventListener('input', (e) => {
         const val = parseFloat(e.target.value);
         generator.amplitude = val;
         ampVal.textContent = val.toFixed(1) + 'x';
     });
-
     noiseSlider.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value);
+        const val = parseInt(e.target.value, 10);
         generator.noiseLevel = val;
         noiseVal.textContent = val + '%';
     });
+    humCheck.addEventListener('change', (e) => { generator.enableHum = e.target.checked; });
+    wanderCheck.addEventListener('change', (e) => { generator.enableWander = e.target.checked; });
 
-    humCheck.addEventListener('change', (e) => {
-        generator.enableHum = e.target.checked;
-    });
-
-    wanderCheck.addEventListener('change', (e) => {
-        generator.enableWander = e.target.checked;
-    });
-
-    btnHP.addEventListener('click', () => {
-        processor.hpEnabled = !processor.hpEnabled;
-        btnHP.classList.toggle('active', processor.hpEnabled);
+    const toggleFilter = (btn, key) => {
+        processor[key] = !processor[key];
+        btn.classList.toggle('active', processor[key]);
+        btn.setAttribute('aria-pressed', String(processor[key]));
         updateFilterLabel();
-    });
-
-    btnLP.addEventListener('click', () => {
-        processor.lpEnabled = !processor.lpEnabled;
-        btnLP.classList.toggle('active', processor.lpEnabled);
-        updateFilterLabel();
-    });
-
-    btnNotch.addEventListener('click', () => {
-        processor.notchEnabled = !processor.notchEnabled;
-        btnNotch.classList.toggle('active', processor.notchEnabled);
-        updateFilterLabel();
-    });
+    };
+    btnHP.addEventListener('click', () => toggleFilter(btnHP, 'hpEnabled'));
+    btnLP.addEventListener('click', () => toggleFilter(btnLP, 'lpEnabled'));
+    btnNotch.addEventListener('click', () => toggleFilter(btnNotch, 'notchEnabled'));
 
     btnPlay.addEventListener('click', () => {
         isRunning = !isRunning;
-        btnPlay.textContent = isRunning ? "Pausar / Reanudar" : "Reanudar Simulación";
+        btnPlay.setAttribute('aria-label', isRunning ? 'Pausar' : 'Reanudar');
+        btnPlay.classList.toggle('paused', !isRunning);
+        btnPlay.querySelector('use').setAttribute('href', isRunning ? '#i-pause' : '#i-play');
     });
 
     function updateFilterLabel() {
         const active = [];
         if (processor.hpEnabled) active.push('HP');
-        if (processor.lpEnabled) active.push('LP');
         if (processor.notchEnabled) active.push('NOTCH');
-
+        if (processor.lpEnabled) active.push('LP');
         filterStatus.textContent = active.length > 0 ? active.join(' + ') : 'INACTIVOS';
+    }
+
+    // ¿La señal viene de un Arduino (USB directo o servidor) o del generador simulado?
+    // UsbSerial y ArduinoLink son "const" de otros scripts: no cuelgan de window, por eso se usa typeof
+    function fuenteActiva() {
+        if (typeof UsbSerial !== 'undefined' && UsbSerial.active) return UsbSerial;
+        if (typeof ArduinoLink !== 'undefined' && ArduinoLink.active) return ArduinoLink;
+        return null;
+    }
+
+    function pintarEstado(fuente) {
+        const { texto, clase } = fuente ? fuente.estadoSenal() : { texto: isRunning ? 'SIMULACIÓN' : 'EN PAUSA', clase: 'live' };
+        statusText.textContent = !isRunning && fuente ? 'EN PAUSA' : texto;
+        statusPill.dataset.estado = !isRunning ? 'pausa' : clase;
     }
 
     // Muestra un valor numérico o "--" mientras todavía no hay medición
@@ -110,53 +112,60 @@ document.addEventListener('DOMContentLoaded', () => {
         // El reloj avanza siempre, incluso en pausa, para no generar una ráfaga de muestras al reanudar
         const dt = lastFrame === null ? 0 : Math.min((ahora - lastFrame) / 1000, MAX_CATCHUP_S);
         lastFrame = ahora;
-        if (!isRunning) return;
 
-        // ¿La señal viene del Arduino (vía servidor) o del generador simulado?
-        // ArduinoLink es un "const" de otro script: no cuelga de window, por eso se consulta con typeof
-        const arduinoOn = typeof ArduinoLink !== 'undefined' && ArduinoLink.active;
-        if (arduinoOn !== lastArduinoOn) {
-            lastArduinoOn = arduinoOn;
-            signalHeading.textContent = arduinoOn
-                ? 'ECG real · Arduino AD8232'
-                : 'ECG simulado · fs = 250 Hz';
-            statusIndicator.textContent = arduinoOn ? 'ARDUINO' : 'SIMULACIÓN';
+        const fuente = fuenteActiva();
+        if (fuente !== lastSource) {
+            lastSource = fuente;
+            signalHeading.textContent = fuente ? fuente.etiqueta : 'ECG simulado · fs = 250 Hz';
+            signalNotice.textContent = fuente
+                ? 'Señal real del Arduino. Activa los filtros para limpiarla; la frecuencia cardíaca la calcula el Arduino (o el detector de la página).'
+                : AVISO_SIMULACION;
+            simControls.classList.toggle('dim', !!fuente);
             processor.resetDetector();     // otra señal → el detector debe recalibrarse
+            renderer.clear();
             sampleDebt = 0;
         }
 
+        if (!isRunning) {
+            if (fuente) fuente.drain();    // en pausa se descartan las muestras que siguen llegando
+            if (ahora - lastMetricsUpdate >= 250) { lastMetricsUpdate = ahora; pintarEstado(fuente); }
+            return;
+        }
+
         let hasNewSamples = false;
-        if (arduinoOn) {
+        if (fuente) {
             // El ritmo lo marca el Arduino: se procesan todas las muestras recibidas
-            processor.fs = ArduinoLink.fs || fs;
-            for (const rawSample of ArduinoLink.drain()) {
+            processor.fs = fuente.fs || fs;
+            renderer.setSampleRate(processor.fs);
+            for (const rawSample of fuente.drain()) {
                 currentTime += 1 / processor.fs;
                 renderer.addSample(processor.processSample(rawSample, currentTime));
                 hasNewSamples = true;
             }
         } else {
             processor.fs = fs;
+            renderer.setSampleRate(fs);
             sampleDebt += dt * fs;
             while (sampleDebt >= 1) {
                 sampleDebt -= 1;
                 currentTime += 1 / fs;
-                const rawSample = generator.nextSample();
-                renderer.addSample(processor.processSample(rawSample, currentTime));
+                renderer.addSample(processor.processSample(generator.nextSample(), currentTime));
                 hasNewSamples = true;
             }
         }
         if (hasNewSamples) renderer.render();
 
-        const arduinoBpm = arduinoOn && ArduinoLink.bpm ? ArduinoLink.bpm : null;
+        const arduinoBpm = fuente && fuente.bpm ? fuente.bpm : null;
         const currentBPM = arduinoBpm !== null ? arduinoBpm : processor.detectedBPM;
         lastBpm = currentBPM;
-        lastSource = arduinoOn ? 'arduino' : 'simulado';
+        lastSourceName = fuente ? 'arduino' : 'simulado';
 
         if (ahora - lastMetricsUpdate >= 250) {
             lastMetricsUpdate = ahora;
             bpmDisplay.textContent = mostrar(currentBPM);
             freqDisplay.textContent = currentBPM ? mostrar(currentBPM / 60, 2) : '--';
             rrDisplay.textContent = currentBPM ? mostrar(60 / currentBPM, 2) : '--';
+            pintarEstado(fuente);
         }
     }
 

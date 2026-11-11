@@ -2,39 +2,68 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador de ECG & Teoría de Señales</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#060a14">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="Simulador y monitor de ECG en tiempo real con Arduino + AD8232: filtros digitales, detección de latidos (Pan-Tompkins) y teoría de señales.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Simulador ECG · Teoría de Señales">
+    <meta property="og:description" content="Genera, mide y filtra una señal cardíaca en tiempo real desde el navegador o con un Arduino.">
+    <title>Simulador ECG · Teoría de Señales</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b1426'/%3E%3Cpath d='M4 17h6l2.5-6 5 12 2.5-6H28' fill='none' stroke='%235ef2c2' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <header class="header">
-        <div class="logo-container">
-            <span class="heart-icon">🫀</span>
-            <div class="brand-copy">
-                <span class="brand-kicker">LABORATORIO DIGITAL</span>
-                <h1>Simulador ECG</h1>
-            </div>
-        </div>
-        <div class="header-right">
-            <div class="badge">Universidad de Manizales</div>
-            <a class="badge" href="presentacion/index.html">Presentación</a>
-            <div class="auth-bar" id="authBar">
-                <span id="authUser" class="auth-user" hidden></span>
-                <button id="btnLogin" class="btn btn-connect btn-small" type="button">Iniciar sesión</button>
-                <button id="btnRegister" class="btn btn-small" type="button">Crear cuenta</button>
-                <button id="btnLogout" class="btn btn-disconnect btn-small" type="button" hidden>Cerrar sesión</button>
-            </div>
+    <!-- Iconos (se reutilizan con <use href="#i-…">) -->
+    <svg class="sprite" aria-hidden="true" focusable="false">
+        <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M2 12h4.5l2.2-5.5 4.6 11 2.2-5.5H22"/></symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2.5"/><path d="M8.5 20h7M12 16v4"/></symbol>
+        <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></symbol>
+        <symbol id="i-usb" viewBox="0 0 24 24"><path d="M9 2.5v4M15 2.5v4M6.5 6.5h11V11a5.5 5.5 0 0 1-11 0V6.5zM12 16.5v5"/></symbol>
+        <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="7" rx="2"/><rect x="3.5" y="13" width="17" height="7" rx="2"/><path d="M7.5 7.5h.01M7.5 16.5h.01"/></symbol>
+        <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12c2.2-6.5 4.3-6.5 6.5 0s4.3 6.5 6.5 0 4.3-6.5 6.5 0"/></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+        <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5a3.5 3.5 0 0 1 0 7M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></symbol>
+        <symbol id="i-book" viewBox="0 0 24 24"><path d="M4.5 5.5A2.5 2.5 0 0 1 7 3h12.5v15H7a2.5 2.5 0 0 0-2.5 2.5v-15z"/><path d="M4.5 20.5A2.5 2.5 0 0 1 7 18h12.5v3H7"/></symbol>
+        <symbol id="i-slides" viewBox="0 0 24 24"><path d="M3 4h18M5 4v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4M12 16v4.5M9 20.5h6"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></symbol>
+        <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5-12-7.5z"/></symbol>
+    </svg>
+
+    <div class="backdrop" aria-hidden="true"></div>
+
+    <header class="topbar glass">
+        <a class="brand" href="#signalMonitor" aria-label="Simulador ECG, ir al monitor">
+            <span class="brand-mark"><svg class="icon"><use href="#i-pulse"/></svg></span>
+            <span class="brand-copy">
+                <span class="brand-kicker">Laboratorio digital</span>
+                <span class="brand-title">Simulador ECG</span>
+            </span>
+        </a>
+        <nav class="topnav" aria-label="Secciones">
+            <a href="#signalMonitor">Monitor</a>
+            <a href="#simulationControls">Controles</a>
+            <a href="#arduinoSection">Arduino</a>
+            <a href="#theory">Teoría</a>
+            <a href="presentacion/index.html">Presentación</a>
+        </nav>
+        <div class="auth-bar solo-servidor" id="authBar">
+            <span id="authUser" class="auth-user" hidden></span>
+            <button id="btnLogin" class="btn btn-connect btn-small" type="button">Entrar</button>
+            <button id="btnRegister" class="btn btn-small btn-ghost" type="button">Crear cuenta</button>
+            <button id="btnLogout" class="btn btn-disconnect btn-small" type="button" hidden>Salir</button>
         </div>
     </header>
 
-    <dialog id="authDialog" class="auth-dialog" aria-labelledby="authTitle">
+    <dialog id="authDialog" class="auth-dialog glass" aria-labelledby="authTitle">
         <form id="authForm" method="dialog" novalidate>
             <h2 id="authTitle">Iniciar sesión</h2>
             <label id="authNameRow" for="authName" hidden>Nombre
                 <input id="authName" type="text" autocomplete="name" maxlength="80">
             </label>
             <label for="authEmail">Correo electrónico
-                <input id="authEmail" type="email" autocomplete="email" maxlength="120" required>
+                <input id="authEmail" type="email" autocomplete="email" inputmode="email" maxlength="120" required>
             </label>
             <label for="authPassword">Contraseña <small id="authPwHint" hidden>(mínimo 8 caracteres)</small>
                 <input id="authPassword" type="password" autocomplete="current-password" maxlength="72" required>
@@ -48,109 +77,212 @@
         </form>
     </dialog>
 
-    <div class="demo-banner" id="demoBanner" role="note" hidden>
-        <strong>Modo demostración.</strong>
-        Esta versión web incluye el simulador, los filtros y el análisis de señales.
-        El inicio de sesión, el historial (MySQL) y el enlace con el Arduino solo existen cuando se ejecuta el servidor con <code>npm start</code>.
+    <div class="mode-banner glass" id="demoBanner" role="note" hidden>
+        <strong id="demoTitle">Versión web.</strong>
+        <span id="demoText"></span>
     </div>
 
-    <main class="container">
-        <section class="welcome-card" aria-labelledby="welcomeTitle">
-            <div class="welcome-copy">
-                <span class="eyebrow">PLATAFORMA INTERACTIVA · ECG</span>
-                <h2 id="welcomeTitle">Entiende cada latido.</h2>
-                <p>Explora cómo se genera, se mide y se procesa una señal cardíaca en tiempo real.</p>
+    <main class="layout">
+        <section class="hero glass" aria-labelledby="welcomeTitle">
+            <div class="hero-copy">
+                <span class="eyebrow">Plataforma interactiva · ECG</span>
+                <h1 id="welcomeTitle">Entiende cada latido.</h1>
+                <p>Genera, mide y filtra una señal cardíaca en tiempo real, desde el navegador o con un Arduino y el módulo AD8232.</p>
             </div>
-            <nav class="quick-nav" aria-label="Accesos rápidos">
-                <a href="#signalMonitor"><span>01</span> Monitor</a>
-                <a href="#simulationControls"><span>02</span> Controles</a>
-                <a href="#theory"><span>03</span> Aprende</a>
-            </nav>
+            <ul class="hero-chips" aria-label="Características">
+                <li><strong>250 Hz</strong> muestreo</li>
+                <li><strong>3 filtros</strong> IIR</li>
+                <li><strong>Pan-Tompkins</strong> BPM</li>
+            </ul>
         </section>
 
-        <section class="monitor-section" id="signalMonitor" aria-label="Monitor y controles de señal">
-            <div class="screen-card">
-                <div class="screen-header">
-                    <h2 id="signalHeading">ECG simulado · fs = 250 Hz</h2>
-                    <div class="status-indicator">
-                        <span id="dot-live" class="dot live"></span>
+        <div class="col-main">
+            <section class="card glass monitor" id="signalMonitor" aria-labelledby="signalHeading">
+                <div class="card-head">
+                    <div class="card-title">
+                        <span class="card-icon"><svg class="icon"><use href="#i-monitor"/></svg></span>
+                        <h2 id="signalHeading">ECG simulado · fs = 250 Hz</h2>
+                    </div>
+                    <div class="status-pill" id="statusPill" data-estado="live">
+                        <span id="dot-live" class="dot"></span>
                         <span id="text-status">SIMULACIÓN</span>
                     </div>
                 </div>
 
                 <div class="canvas-container">
-                    <canvas id="ecgCanvas" width="900" height="320"></canvas>
+                    <canvas id="ecgCanvas" role="img" aria-label="Trazo del electrocardiograma en tiempo real"></canvas>
+                    <button id="btnTogglePlay" class="btn-fab" type="button" aria-label="Pausar">
+                        <svg class="icon"><use href="#i-pause"/></svg>
+                    </button>
                 </div>
 
                 <div class="metrics-grid">
-                    <div class="metric-card">
+                    <div class="metric-card metric-main">
                         <span class="metric-label">Frecuencia cardíaca</span>
-                        <span class="metric-value" id="bpmDisplay">--</span>
-                        <span class="metric-unit">lpm</span>
+                        <span class="metric-value"><span id="bpmDisplay">--</span><span class="metric-unit">lpm</span></span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-label">Frecuencia fundamental (f)</span>
-                        <span class="metric-value" id="freqDisplay">--</span>
-                        <span class="metric-unit">Hz</span>
+                        <span class="metric-label">Fundamental f</span>
+                        <span class="metric-value"><span id="freqDisplay">--</span><span class="metric-unit">Hz</span></span>
                     </div>
                     <div class="metric-card">
                         <span class="metric-label">Intervalo RR</span>
-                        <span class="metric-value" id="rrDisplay">--</span>
-                        <span class="metric-unit">s</span>
+                        <span class="metric-value"><span id="rrDisplay">--</span><span class="metric-unit">s</span></span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-label">Filtros Activos</span>
+                        <span class="metric-label">Filtros activos</span>
                         <span class="metric-value status-text" id="filterStatus">INACTIVOS</span>
-                        <span class="metric-unit">DSP</span>
                     </div>
                 </div>
-                <p class="signal-notice">
-                    La señal del Arduino AD8232 se muestra en tiempo real al seleccionar «Usar señal del Arduino». Sin conexión, se muestra la simulación educativa.
+                <p class="signal-notice" id="signalNotice">
+                    Señal simulada en tu navegador. Conecta un Arduino con el AD8232 para ver tu ECG real en este mismo monitor.
                 </p>
-            </div>
+            </section>
 
+            <section class="card glass" id="simulationControls" aria-labelledby="simTitle">
+                <div class="card-title">
+                    <span class="card-icon"><svg class="icon"><use href="#i-sliders"/></svg></span>
+                    <h2 id="simTitle">Simulación y ruido</h2>
+                </div>
+                <div class="controls-grid sim-only">
+                    <div class="control-group">
+                        <label for="bpmSlider">Frecuencia cardíaca <strong id="bpmVal">75</strong></label>
+                        <input type="range" id="bpmSlider" min="40" max="180" value="75">
+                    </div>
+                    <div class="control-group">
+                        <label for="ampSlider">Amplitud <strong id="ampVal">1.0x</strong></label>
+                        <input type="range" id="ampSlider" min="0.2" max="2.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="control-group">
+                        <label for="noiseSlider">Ruido gaussiano <strong id="noiseVal">10%</strong></label>
+                        <input type="range" id="noiseSlider" min="0" max="100" value="10">
+                    </div>
+                    <div class="control-group toggles">
+                        <label class="switch-row" for="humCheck">
+                            <span>Interferencia de red (60 Hz)</span>
+                            <input type="checkbox" class="switch" id="humCheck">
+                        </label>
+                        <label class="switch-row" for="wanderCheck">
+                            <span>Deriva de línea base (&lt; 0.5 Hz)</span>
+                            <input type="checkbox" class="switch" id="wanderCheck">
+                        </label>
+                    </div>
+                </div>
 
-            <div class="controls-card" id="arduinoCard">
-                <h3>🔌 Arduino (módulo ECG AD8232)</h3>
+                <hr class="divider">
+
+                <div class="card-title">
+                    <span class="card-icon"><svg class="icon"><use href="#i-wave"/></svg></span>
+                    <h2>Filtros digitales</h2>
+                </div>
+                <div class="filter-grid">
+                    <button id="btnHighPass" class="btn btn-filter" type="button" aria-pressed="false"><span class="led"></span>Pasa-altas 0.5 Hz</button>
+                    <button id="btnNotch" class="btn btn-filter" type="button" aria-pressed="false"><span class="led"></span>Notch 60 Hz</button>
+                    <button id="btnLowPass" class="btn btn-filter" type="button" aria-pressed="false"><span class="led"></span>Pasa-bajas 40 Hz</button>
+                </div>
+            </section>
+        </div>
+
+        <aside class="col-side" id="arduinoSection" aria-label="Arduino e historial">
+            <!-- Conexión directa: el navegador lee el puerto USB (Web Serial). Funciona también en la página publicada. -->
+            <section class="card glass" id="usbCard" aria-labelledby="usbTitle" hidden>
+                <div class="card-title">
+                    <span class="card-icon"><svg class="icon"><use href="#i-usb"/></svg></span>
+                    <h2 id="usbTitle">Arduino por USB</h2>
+                </div>
+                <p id="usbStatus" class="sensor-status" role="status" aria-live="polite">Conecta el Arduino a este computador y pulsa «Conectar».</p>
+                <div id="usbPanel">
+                    <dl class="info-list">
+                        <div><dt>Placa</dt><dd id="usbDevice">—</dd></div>
+                        <div><dt>Muestreo</dt><dd id="usbFs">—</dd></div>
+                        <div><dt>BPM (Arduino)</dt><dd id="usbBpm">—</dd></div>
+                        <div><dt>Electrodos</dt><dd id="usbLeads">—</dd></div>
+                        <div><dt>Derivación</dt><dd id="usbDer">—</dd></div>
+                        <div><dt>Ritmo · QRS</dt><dd id="usbRitmo">—</dd></div>
+                    </dl>
+                    <div class="device-buttons">
+                        <button id="btnUsbConnect" class="btn btn-connect" type="button">Conectar Arduino</button>
+                        <button id="btnUsbUse" class="btn" type="button" disabled>Mostrar en el monitor</button>
+                    </div>
+                    <p class="hint"><button id="btnUsbAll" class="link-btn" type="button">¿No aparece tu placa? Ver todos los puertos</button></p>
+                    <details class="more">
+                        <summary>Comandos al Arduino</summary>
+                        <div class="controls-grid compact">
+                            <label class="switch-row" for="chkUsbLed"><span>LED externo (D8)</span><input type="checkbox" class="switch" id="chkUsbLed" disabled></label>
+                            <label class="switch-row" for="chkUsbStream"><span>Enviar muestras</span><input type="checkbox" class="switch" id="chkUsbStream" checked disabled></label>
+                            <div class="control-group">
+                                <label for="selUsbFs">Frecuencia de muestreo</label>
+                                <select id="selUsbFs" disabled>
+                                    <option value="125">125 Hz</option>
+                                    <option value="250" selected>250 Hz</option>
+                                    <option value="500">500 Hz</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label for="selUsbDer">Derivación medida</label>
+                                <select id="selUsbDer" disabled><option value="I">I</option><option value="II">II</option><option value="III">III</option><option value="AVR">AVR</option><option value="AVL">AVL</option><option value="AVF">AVF</option><option value="V1">V1</option><option value="V2">V2</option><option value="V3">V3</option><option value="V4">V4</option><option value="V5">V5</option><option value="V6">V6</option></select>
+                            </div>
+                            <button id="btnUsbPing" class="btn" type="button" disabled>Probar (PING)</button>
+                        </div>
+                        <ul id="usbLog" class="cmd-log" aria-label="Últimos comandos enviados"></ul>
+                    </details>
+                </div>
+            </section>
+
+            <!-- Conexión a través del servidor (npm start): el servidor lee el puerto y lo reparte a todos los navegadores -->
+            <section class="card glass solo-servidor" id="arduinoCard" aria-labelledby="arduinoTitle">
+                <div class="card-title">
+                    <span class="card-icon"><svg class="icon"><use href="#i-server"/></svg></span>
+                    <h2 id="arduinoTitle">Arduino (servidor)</h2>
+                </div>
                 <p id="arduinoLock" class="sensor-status">Inicia sesión para ver y controlar el Arduino.</p>
                 <div id="arduinoPanel" hidden>
                     <p id="arduinoStatus" class="sensor-status" role="status" aria-live="polite">Conectando con el servidor…</p>
                     <dl class="info-list">
                         <div><dt>Dispositivo</dt><dd id="adDevice">—</dd></div>
-                        <div><dt>Conexión</dt><dd id="adPort">—</dd></div>
+                        <div><dt>Puerto</dt><dd id="adPort">—</dd></div>
                         <div><dt>Muestreo</dt><dd id="adFs">—</dd></div>
                         <div><dt>BPM (Arduino)</dt><dd id="adBpm">—</dd></div>
                         <div><dt>Electrodos</dt><dd id="adLeads">—</dd></div>
+                        <div><dt>Derivación</dt><dd id="adDer">—</dd></div>
+                        <div><dt>Ritmo · QRS</dt><dd id="adRitmo">—</dd></div>
                     </dl>
                     <div class="device-buttons">
                         <button id="btnArduinoUse" class="btn btn-connect" type="button" disabled>Usar señal del Arduino</button>
-                        <button id="btnArduinoPing" class="btn" type="button" disabled>Probar conexión (PING)</button>
+                        <button id="btnArduinoPort" class="btn" type="button" disabled title="Suelta el puerto para poder subir un sketch desde el Arduino IDE">Liberar puerto</button>
                     </div>
-                    <hr class="divider">
-                    <h4 class="sub-title">Comandos al Arduino</h4>
-                    <div class="controls-grid">
-                        <div class="control-group">
-                            <label class="check-row"><input type="checkbox" id="chkArduinoLed" disabled> LED externo (pin D8)</label>
-                            <label class="check-row"><input type="checkbox" id="chkArduinoStream" checked disabled> Enviar muestras ECG</label>
+                    <details class="more">
+                        <summary>Comandos al Arduino</summary>
+                        <div class="controls-grid compact">
+                            <label class="switch-row" for="chkArduinoLed"><span>LED externo (D8)</span><input type="checkbox" class="switch" id="chkArduinoLed" disabled></label>
+                            <label class="switch-row" for="chkArduinoStream"><span>Enviar muestras</span><input type="checkbox" class="switch" id="chkArduinoStream" checked disabled></label>
+                            <div class="control-group">
+                                <label for="selArduinoFs">Frecuencia de muestreo</label>
+                                <select id="selArduinoFs" disabled>
+                                    <option value="125">125 Hz</option>
+                                    <option value="250" selected>250 Hz</option>
+                                    <option value="500">500 Hz</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label for="selArduinoDer">Derivación medida</label>
+                                <select id="selArduinoDer" disabled><option value="I">I</option><option value="II">II</option><option value="III">III</option><option value="AVR">AVR</option><option value="AVL">AVL</option><option value="AVF">AVF</option><option value="V1">V1</option><option value="V2">V2</option><option value="V3">V3</option><option value="V4">V4</option><option value="V5">V5</option><option value="V6">V6</option></select>
+                            </div>
+                            <button id="btnArduinoPing" class="btn" type="button" disabled>Probar (PING)</button>
                         </div>
-                        <div class="control-group">
-                            <label for="selArduinoFs">Frecuencia de muestreo (Hz)</label>
-                            <select id="selArduinoFs" disabled>
-                                <option value="125">125 Hz</option>
-                                <option value="250" selected>250 Hz</option>
-                                <option value="500">500 Hz</option>
-                            </select>
-                        </div>
-                    </div>
-                    <ul id="arduinoLog" class="cmd-log" aria-label="Últimos comandos enviados"></ul>
+                        <ul id="arduinoLog" class="cmd-log" aria-label="Últimos comandos enviados"></ul>
+                    </details>
                 </div>
-            </div>
+            </section>
 
-            <div class="controls-card" id="historyCard">
-                <h3>🗂️ Historial de frecuencia cardíaca</h3>
+            <section class="card glass solo-servidor" id="historyCard" aria-labelledby="historyTitle">
+                <div class="card-title">
+                    <span class="card-icon"><svg class="icon"><use href="#i-clock"/></svg></span>
+                    <h2 id="historyTitle">Historial de BPM</h2>
+                </div>
                 <p id="historyLock" class="sensor-status">Inicia sesión para guardar tus mediciones en MySQL.</p>
                 <div id="historyPanel" hidden>
-                    <label class="check-row"><input type="checkbox" id="chkSaveBpm"> Guardar mi frecuencia cardíaca cada 10 s</label>
+                    <label class="switch-row" for="chkSaveBpm"><span>Guardar mi BPM cada 10 s</span><input type="checkbox" class="switch" id="chkSaveBpm"></label>
                     <p id="historyMsg" class="sensor-status" role="status" aria-live="polite"></p>
                     <div id="historySummary" class="history-summary"></div>
                     <div class="table-wrap">
@@ -161,67 +293,34 @@
                     </div>
                     <div class="device-buttons">
                         <button id="btnHistoryRefresh" class="btn btn-connect" type="button">Actualizar</button>
-                        <button id="btnHistoryClear" class="btn btn-disconnect" type="button">Borrar mi historial</button>
+                        <button id="btnHistoryClear" class="btn btn-disconnect" type="button">Borrar historial</button>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="controls-card" id="adminCard" hidden>
-                <h3>👥 Usuarios registrados (administrador)</h3>
+            <section class="card glass solo-servidor" id="adminCard" aria-labelledby="adminTitle" hidden>
+                <div class="card-title">
+                    <span class="card-icon"><svg class="icon"><use href="#i-users"/></svg></span>
+                    <h2 id="adminTitle">Usuarios (administrador)</h2>
+                </div>
                 <div class="table-wrap">
                     <table class="data-table">
                         <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th></tr></thead>
                         <tbody id="adminRows"></tbody>
                     </table>
                 </div>
+            </section>
+        </aside>
+
+        <section class="card glass theory" id="theory" aria-labelledby="theoryTitle">
+            <div class="card-title">
+                <span class="card-icon"><svg class="icon"><use href="#i-book"/></svg></span>
+                <h2 id="theoryTitle">Teoría de señales aplicada al ECG</h2>
             </div>
 
-            <div class="controls-card" id="simulationControls">
-                <h3>🎛️ Controles de Simulación y Ruido</h3>
-                <div class="controls-grid">
-                    <div class="control-group">
-                        <label for="bpmSlider">Frecuencia Cardíaca (BPM): <strong id="bpmVal">75</strong></label>
-                        <input type="range" id="bpmSlider" min="40" max="180" value="75">
-                    </div>
-
-                    <div class="control-group">
-                        <label for="ampSlider">Amplitud de la Señal: <strong id="ampVal">1.0x</strong></label>
-                        <input type="range" id="ampSlider" min="0.2" max="2.0" step="0.1" value="1.0">
-                    </div>
-
-                    <div class="control-group">
-                        <label for="noiseSlider">Ruido Gaussiano: <strong id="noiseVal">10%</strong></label>
-                        <input type="range" id="noiseSlider" min="0" max="100" value="10">
-                    </div>
-
-                    <div class="control-group">
-                        <label for="humCheck">
-                            <input type="checkbox" id="humCheck"> Interferencia de Red (60 Hz)
-                        </label>
-                        <label for="wanderCheck">
-                            <input type="checkbox" id="wanderCheck"> Deriva de Línea Base (&lt;0.5 Hz)
-                        </label>
-                    </div>
-                </div>
-
-                <hr class="divider">
-
-                <h3>🧹 Procesamiento Digital de Señales (Filtros)</h3>
-                <div class="buttons-grid">
-                    <button id="btnHighPass" class="btn btn-filter">Filtro Pasa-Altas (0.5 Hz)</button>
-                    <button id="btnLowPass" class="btn btn-filter">Filtro Pasa-Bajas (40 Hz)</button>
-                    <button id="btnNotch" class="btn btn-filter">Filtro Notch (60 Hz)</button>
-                    <button id="btnTogglePlay" class="btn btn-action">Pausar / Reanudar</button>
-                </div>
-            </div>
-        </section>
-
-        <section class="theory-section" id="theory">
-            <div class="theory-card">
-                <h2>📐 Teoría de Señales Aplicada al ECG</h2>
-
+            <div class="theory-grid">
                 <article class="theory-block">
-                    <h3>1. Muestreo y Teorema de Nyquist-Shannon</h3>
+                    <h3><span>01</span> Muestreo y teorema de Nyquist-Shannon</h3>
                     <p>
                         Para reconstruir una señal analógica sin aliasing, la frecuencia de muestreo debe ser al menos el doble de su frecuencia máxima.
                     </p>
@@ -232,34 +331,32 @@
                             <span class="equation-arrow">⇒</span>
                             <i>T</i><sub>s</sub> =
                             <span class="fraction"><span>1</span><span>250</span></span>
-                            s = 0,004 s = 4 ms
+                            s = 4 ms
                         </div>
                     </div>
                 </article>
 
                 <article class="theory-block">
-                    <h3>2. Contenido Frecuencial del ECG</h3>
+                    <h3><span>02</span> Contenido frecuencial del ECG</h3>
                     <ul>
-                        <li><strong>Deriva de Línea Base (&lt; 0.5 Hz):</strong> Producida por la respiración.</li>
-                        <li><strong>Ondas P y T (0.5 - 10 Hz):</strong> Despolarización auricular y repolarización ventricular.</li>
-                        <li><strong>Complejo QRS (5 - 40 Hz):</strong> Cambios rápidos de mayor amplitud (despolarización ventricular).</li>
-                        <li><strong>Ruido EMG e Interferencia (&gt; 50 Hz):</strong> Actividad muscular e interferencia de la red eléctrica (60 Hz).</li>
+                        <li><strong>Deriva de línea base (&lt; 0.5 Hz):</strong> producida por la respiración.</li>
+                        <li><strong>Ondas P y T (0.5 – 10 Hz):</strong> despolarización auricular y repolarización ventricular.</li>
+                        <li><strong>Complejo QRS (5 – 40 Hz):</strong> cambios rápidos de mayor amplitud (despolarización ventricular).</li>
+                        <li><strong>Ruido EMG e interferencia (&gt; 50 Hz):</strong> actividad muscular y red eléctrica (60 Hz).</li>
                     </ul>
                 </article>
 
                 <article class="theory-block">
-                    <h3>3. Algoritmo de Detección de Picos R (Pan-Tompkins)</h3>
+                    <h3><span>03</span> Detección de picos R (Pan-Tompkins)</h3>
                     <p>
-                        El detector aplica: pasa-banda 5–15 Hz → derivada → elevación al cuadrado → integración en ventana de 150 ms → umbral adaptativo.
-                        A partir del intervalo entre dos complejos QRS consecutivos se obtiene la frecuencia cardíaca y su frecuencia fundamental
-                        (se muestra «--» mientras el detector se calibra, unos segundos):
+                        Pasa-banda 5–15 Hz → derivada → cuadrado → integración en ventana de 150 ms → umbral adaptativo.
+                        Del intervalo entre dos QRS consecutivos sale la frecuencia cardíaca (se muestra «--» mientras el detector se calibra).
                     </p>
                     <div class="formula-box formula-stack" role="math" aria-label="BPM es igual a 60 dividido entre el intervalo RR; frecuencia en hercios es BPM dividido entre 60">
                         <div class="equation">
                             BPM =
                             <span class="fraction"><span>60</span><span><i>T</i><sub>RR</sub></span></span>
-                        </div>
-                        <div class="equation">
+                            <span class="equation-arrow">·</span>
                             <i>f</i> =
                             <span class="fraction"><span>BPM</span><span>60</span></span>
                             <span class="equation-unit">Hz</span>
@@ -272,8 +369,17 @@
     </main>
 
     <footer class="footer">
-        <p>Proyecto de Teoría de Señales | Universidad de Manizales | Jerónimo Soto Villada & Milady Cristina Guapacha Montoya</p>
+        <p>Proyecto de Teoría de Señales · Universidad de Manizales</p>
+        <p>Jerónimo Soto Villada &amp; Milady Cristina Guapacha Montoya · <a href="presentacion/index.html">Presentación</a></p>
+        <p class="footer-note">Proyecto educativo: no es un dispositivo médico.</p>
     </footer>
+
+    <nav class="tabbar glass" aria-label="Navegación rápida">
+        <a href="#signalMonitor" data-target="signalMonitor"><svg class="icon"><use href="#i-monitor"/></svg><span>Monitor</span></a>
+        <a href="#simulationControls" data-target="simulationControls"><svg class="icon"><use href="#i-sliders"/></svg><span>Controles</span></a>
+        <a href="#arduinoSection" data-target="arduinoSection"><svg class="icon"><use href="#i-usb"/></svg><span>Arduino</span></a>
+        <a href="#theory" data-target="theory"><svg class="icon"><use href="#i-book"/></svg><span>Teoría</span></a>
+    </nav>
 
     <script src="js/ecgGenerator.js"></script>
     <script src="js/signalProcessing.js"></script>
@@ -281,7 +387,9 @@
     <script src="js/api.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/arduinoLink.js"></script>
+    <script src="js/usbSerial.js"></script>
     <script src="js/app.js"></script>
     <script src="js/history.js"></script>
+    <script src="js/ui.js"></script>
 </body>
 </html>

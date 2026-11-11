@@ -1,7 +1,16 @@
-# Arduino + AD8232 — conexión y carga del sketch
+# Arduino + AD8232: conexión y carga del sketch
 
 > Proyecto educativo. No es un dispositivo médico ni sirve para diagnóstico.
 > Seguridad: conecta los electrodos **solo** a un Arduino alimentado por USB desde una PC, preferiblemente un portátil funcionando con batería. Nunca conectes el circuito a la red eléctrica ni a otros equipos alimentados por ella.
+
+El sketch del proyecto es **`ecg_plotter_teoria/ecg_plotter_teoria.ino`**. Sirve para las dos cosas:
+
+| Modo | Para qué | Cómo se activa |
+|------|----------|----------------|
+| **Gráfica** | Serial Plotter / Serial Monitor del Arduino IDE: onda filtrada con la derivación en la leyenda, FC, ritmo, QRS, informes de texto | Al encender la placa (o al abrir el Plotter) |
+| **Web** | La página del proyecto (`npm start` o la versión publicada en Vercel): protocolo completo a 250 Hz y comandos | La página envía `WEB` sola al conectarse |
+
+No hay que cambiar nada entre uno y otro: solo **un programa a la vez** puede usar el puerto USB.
 
 ## Cableado
 
@@ -10,31 +19,34 @@
 | 3.3V   | 3.3V |
 | GND    | GND |
 | OUTPUT | A0 |
-| LO+    | D10 |
-| LO-    | D11 |
+| LO+    | D10 (opcional: pon `USAR_LEADS_OFF = true` en el sketch) |
+| LO-    | D11 (opcional: pon `USAR_LEADS_OFF = true` en el sketch) |
 
-| Actuador | Pin | Notas |
+| Actuador (opcional) | Pin | Notas |
 |----------|-----|-------|
 | LED controlado desde la web | D8 | Con resistencia de 220 Ω a GND |
 | LED de latido | D9 | Con resistencia de 220 Ω a GND; parpadea con cada onda R |
 
 Electrodos: conecta el cable de 3 derivaciones (RA, LA, RL) a las almohadillas adhesivas.
 
-## Cargar el sketch
+## Cargar el sketch y verlo en el Arduino IDE
 
 1. Instala el [Arduino IDE](https://www.arduino.cc/en/software).
-2. Abre `ecg_serial/ecg_serial.ino`.
+2. Abre `ecg_plotter_teoria/ecg_plotter_teoria.ino`.
 3. *Herramientas → Placa*: Arduino Uno (o Nano). *Herramientas → Puerto*: el de tu placa.
-4. Pulsa **Subir**. Para verificar, abre el Monitor Serie a **115200** y debes ver `I,ECG_ARDUINO,1.0,fs=250` seguido de líneas `S,<número>`. Escribe `PING` + Enter: responde `A,PING,OK,pong`.
-5. **Cierra el Monitor Serie** antes de iniciar el servidor Node.js (un solo programa puede usar el puerto).
+4. Pulsa **Subir**.
+5. *Herramientas → Serial Plotter* y elige **115200 baud** abajo a la derecha. Verás la onda (`I`, `II`… en la leyenda), `FC` y `Cero`.
+   Escribe `II`, `V1`… en *Type Message* para etiquetar la derivación; `M` para informes de texto, `P` para volver a la gráfica, `RESUMEN` y `AYUDA`.
+6. Prueba sin sensor: pon `MODO_DEMO = true` y vuelve a subirlo (ECG sintético de 72 lpm).
 
-## Conectar con el proyecto
+## Ver la señal en la página
 
-1. Conecta la placa por USB y busca el puerto que aparece para ella en *Herramientas → Puerto* del Arduino IDE. En Windows suele ser `COM` seguido de un número.
-2. Desde la carpeta `ecg-signal-simulator`, ejecuta `npm run puertos` y confirma que aparece el mismo puerto de la placa. Los puertos Bluetooth virtuales no son el Arduino.
-3. En `.env`, establece `ARDUINO_MODE=serial` y `ARDUINO_PORT=COMx`, sustituyendo `COMx` por el puerto verificado. Mantén `ARDUINO_BAUD=115200`.
-4. Cierra el Monitor Serie y reinicia el servidor con `npm start`. Inicia sesión, pulsa **Probar conexión (PING)** y luego **Usar señal del Arduino** para mostrar las muestras reales.
+1. **Cierra el Serial Plotter y el Monitor Serie** (el Arduino IDE puede seguir abierto). En Windows, si siguen abiertos la página dirá «el puerto está ocupado».
+2. Elige una de las dos formas:
+   * **Con el servidor:** `npm start` desde la raíz del repositorio. Con `ARDUINO_PORT=auto` (valor por defecto) el servidor encuentra la placa solo; `npm run puertos` muestra cuál eligió (los COM Bluetooth se ignoran). Inicia sesión y el monitor cambia solo a la señal del Arduino. También puedes abrirla desde un celular en el mismo Wi-Fi (la terminal muestra la dirección).
+   * **Sin servidor:** abre la página publicada en Chrome o Edge en el computador donde está el Arduino y pulsa **Conectar Arduino**.
+3. Para **subir un sketch nuevo** con `npm start` abierto, pulsa **Liberar puerto** en la página, súbelo desde el IDE y luego **Reconectar**.
 
-Si todavía no conectas la placa, deja `ARDUINO_MODE=simulate`; el servidor puede iniciar y mostrar la señal simulada sin hardware.
+Si cambiaste la velocidad del sketch (comandos `300` … `57600`), escribe `0` en el Monitor Serie para volver a 115200, que es la que usa la página. De todas formas, la página prueba 115200 y 9600 si no entiende lo que llega.
 
-El protocolo completo está en el README principal (sección 5.3).
+El protocolo completo está en el README técnico (sección 5.3).
