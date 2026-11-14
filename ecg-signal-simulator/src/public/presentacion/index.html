@@ -2,141 +2,168 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Presentación · Simulador y adquisición de ECG</title>
-    <meta name="description" content="Presentación del proyecto de Teoría de Señales: simulación, adquisición con Arduino, análisis en frecuencia y filtrado de ECG.">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#060a14">
+    <title>Presentación · ECG con Arduino</title>
+    <meta name="description" content="Presentación del proyecto de Teoría de Señales: electrocardiograma con Arduino, muestreo, FFT, filtros digitales y cálculo de la frecuencia cardíaca.">
+    <!-- KaTeX: las fórmulas se ven como en un libro (misma tipografía que LaTeX) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
     <style>
         :root {
             color-scheme: dark;
-            --bg: #080d18;
-            --panel: #111a2c;
-            --panel-2: #172238;
-            --line: rgba(164, 190, 225, 0.18);
-            --text: #f0f5ff;
-            --muted: #9baac0;
+            --bg: #060a14;
+            --panel: rgba(255, 255, 255, 0.05);
+            --line: rgba(255, 255, 255, 0.11);
+            --text: #eef4ff;
+            --muted: #a3b3ca;
             --cyan: #7ddcff;
-            --green: #78f0c0;
+            --green: #5ef2c2;
             --yellow: #ffd27b;
-            --red: #ff8291;
-            --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-            --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            --papel: #fbf9f3;
+            --tinta: #1d2027;
+            --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            --serif: "Cambria", "Georgia", "Times New Roman", serif;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { scroll-snap-type: y proximity; scroll-behavior: smooth; font-size: clamp(15px, 0.7vw + 11px, 24px); }
-        body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; }
+        html { scroll-snap-type: y proximity; scroll-behavior: smooth; font-size: clamp(15px, 0.65vw + 11px, 23px); }
+        body {
+            background:
+                radial-gradient(40rem 30rem at 5% -10%, rgba(32, 156, 196, 0.25), transparent 70%),
+                radial-gradient(36rem 30rem at 100% 10%, rgba(118, 90, 230, 0.18), transparent 70%),
+                var(--bg);
+            background-attachment: fixed;
+            color: var(--text);
+            font-family: var(--font);
+            line-height: 1.5;
+        }
         a { color: var(--cyan); overflow-wrap: anywhere; }
-        code { font-family: var(--mono); color: var(--green); font-size: 0.92em; }
 
         /* ---------- Diapositiva ---------- */
         .slide {
-            min-height: 100vh; min-height: 100svh;
-            scroll-snap-align: start;
-            display: flex; flex-direction: column; justify-content: center;
-            padding: 3.2rem clamp(1rem, 5vw, 4.5rem) 3rem;
-            border-bottom: 1px solid var(--line);
             position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 100vh;
+            min-height: 100svh;
+            padding: 3.4rem clamp(1rem, 5vw, 4.5rem) 3rem;
+            border-bottom: 1px solid var(--line);
+            scroll-snap-align: start;
         }
-        .slide > * { max-width: 72rem; width: 100%; margin-inline: auto; }
-        .kicker { color: var(--cyan); font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; margin-bottom: 0.4rem; }
-        h1 { font-size: clamp(2rem, 5.2vw, 3.4rem); line-height: 1.1; margin-bottom: 0.9rem; }
-        h2 { font-size: clamp(1.45rem, 3.2vw, 2.15rem); line-height: 1.2; margin-bottom: 1rem; }
-        h3 { font-size: 1.05rem; color: var(--green); margin-bottom: 0.35rem; }
+        .slide > * { width: 100%; max-width: 70rem; margin-inline: auto; }
+        .kicker { margin-bottom: 0.4rem; color: var(--cyan); font-size: 0.76rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; }
+        h1 { margin-bottom: 0.9rem; font-size: clamp(2rem, 5vw, 3.3rem); line-height: 1.08; letter-spacing: -0.03em; }
+        h2 { margin-bottom: 1.1rem; font-size: clamp(1.5rem, 3.2vw, 2.2rem); line-height: 1.15; letter-spacing: -0.02em; }
+        h3 { margin-bottom: 0.35rem; color: var(--green); font-size: 1.02rem; }
         p { margin-bottom: 0.6rem; }
-        .lead { font-size: 1.15rem; color: var(--muted); }
-        ul, ol { margin: 0.2rem 0 0.6rem 1.25rem; }
-        li { margin-bottom: 0.28rem; }
-        strong { color: var(--text); }
+        .lead { color: var(--muted); font-size: 1.18rem; }
+        ul { margin: 0.2rem 0 0.6rem 1.2rem; }
+        li { margin-bottom: 0.4rem; }
         .muted { color: var(--muted); }
-        .accent { color: var(--green); }
-        .warn { color: var(--yellow); }
+        .small { font-size: 0.85rem; }
 
-        .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem 1.6rem; align-items: start; }
+        .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem 1.8rem; align-items: start; }
         .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .cols-wide-left { grid-template-columns: 1.35fr 1fr; }
-        @media (max-width: 800px) { .cols, .cols-3, .cols-wide-left { grid-template-columns: 1fr; } }
+        @media (max-width: 820px) { .cols, .cols-3 { grid-template-columns: minmax(0, 1fr); } }
 
-        .card { background: var(--panel); border: 1px solid var(--line); border-radius: 0.8rem; padding: 0.9rem 1.1rem; }
-        .card.hl { border-color: rgba(120, 240, 192, 0.45); background: rgba(120, 240, 192, 0.06); }
-        .card.alert { border-color: rgba(255, 210, 123, 0.5); background: rgba(255, 210, 123, 0.06); }
+        .card { padding: 0.9rem 1.1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--panel); }
+        .card.hl { border-color: rgba(94, 242, 194, 0.4); background: rgba(94, 242, 194, 0.07); }
+        .card.ok { border-color: rgba(255, 210, 123, 0.45); background: rgba(255, 210, 123, 0.07); }
 
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th, td { text-align: left; padding: 0.38rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-        th { color: var(--cyan); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
-        td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+        /* ---------- Fórmulas "de libro": hoja clara, tinta oscura, tipografía de LaTeX ---------- */
+        .libro {
+            margin: 0.4rem 0 0.8rem;
+            padding: 0.7rem 1.1rem 0.6rem;
+            overflow-x: auto;
+            border-radius: 0.6rem;
+            background: var(--papel);
+            color: var(--tinta);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+        .libro .katex-display { margin: 0.45rem 0; }
+        .libro .katex { font-size: 1.22em; }
+        .libro .nota { margin: 0.1rem 0 0.2rem; color: #4a4f5c; font-family: var(--serif); font-size: 0.86rem; font-style: italic; }
+        .libro .nota b { color: var(--tinta); font-style: normal; }
+        .libro .ejemplo { margin-top: 0.3rem; padding-top: 0.4rem; border-top: 1px solid #e3ded2; color: #3b3f49; font-family: var(--serif); font-size: 0.9rem; }
+        .filtro { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 0 1.2rem; align-items: center; margin-bottom: 0.2rem; }
+        .filtro .libro { margin: 0.25rem 0; }
+        .angosto { display: none; }   /* versión de las fórmulas en dos líneas, para pantallas angostas */
+        @media screen and (max-width: 1050px) { .ancho { display: none; } .angosto { display: block; } }
+        @media (max-width: 820px) {
+            .filtro { grid-template-columns: minmax(0, 1fr); }
+            .libro .katex { font-size: 0.98em; }
+            /* en pantallas angostas el número de ecuación tapaba la fórmula */
+            .libro .katex-display .tag { display: none; }
+        }
+
+        /* ---------- Flujo ---------- */
+        .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.5rem; margin: 0.6rem 0 0.9rem; }
+        .flow .box { flex: 1 1 9rem; padding: 0.75rem 0.85rem; border: 1px solid var(--line); border-radius: 0.9rem; background: var(--panel); font-size: 0.92rem; }
+        .flow .box b { display: block; margin-bottom: 0.2rem; color: var(--cyan); font-size: 0.82rem; letter-spacing: 0.05em; text-transform: uppercase; }
+        .flow .arrow { align-self: center; flex: 0 0 auto; color: var(--green); font-size: 1.5rem; }
+        @media (max-width: 760px) { .flow { flex-direction: column; } .flow .arrow { transform: rotate(90deg); text-align: center; } }
+
+        /* ---------- Tablas e imágenes ---------- */
+        table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+        th, td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+        th { color: var(--cyan); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
         .table-wrap { overflow-x: auto; }
-
-        figure { background: #fff; border-radius: 0.6rem; padding: 0.4rem; }
+        figure { padding: 0.4rem; border-radius: 0.7rem; background: #fff; }
         figure img { display: block; width: 100%; height: auto; }
-        figcaption { color: #3a4152; font-size: 0.78rem; padding: 0.2rem 0.4rem 0.1rem; }
+        figcaption { padding: 0.25rem 0.4rem 0.1rem; color: #3a4152; font-size: 0.78rem; }
+        .beat { width: 100%; height: auto; }
 
-        .eq { font-family: var(--mono); font-size: 0.92rem; background: var(--panel-2); border-left: 3px solid var(--cyan); padding: 0.55rem 0.8rem; border-radius: 0 0.5rem 0.5rem 0; margin: 0.45rem 0; overflow-x: auto; white-space: pre-wrap; }
-        .big-number { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 700; color: var(--green); line-height: 1.1; }
+        .big { color: var(--green); font-size: clamp(1.6rem, 3.6vw, 2.5rem); font-weight: 800; line-height: 1.1; }
+        .pill { display: inline-block; margin: 0 0.3rem 0.35rem 0; padding: 0.15rem 0.7rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 0.82rem; }
+        .steps { margin: 0; list-style: none; counter-reset: paso; }
+        .steps li { counter-increment: paso; position: relative; margin-bottom: 0.55rem; padding-left: 2.3rem; }
+        .steps li::before {
+            content: counter(paso); position: absolute; left: 0; top: 0.05rem;
+            width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--green); color: #04101c;
+            font-size: 0.85rem; font-weight: 800; line-height: 1.6rem; text-align: center;
+        }
+        .btn { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; border-radius: 0.7rem; background: var(--green); color: #04101c; font-weight: 700; text-decoration: none; }
+        .refs { margin-left: 1.1rem; font-size: 0.82rem; color: var(--muted); }
+        .refs li { margin-bottom: 0.3rem; }
 
-        /* flujo / tuberías */
-        .flow { display: flex; align-items: stretch; gap: 0.5rem; flex-wrap: wrap; }
-        .flow .box { flex: 1 1 8rem; background: var(--panel); border: 1px solid var(--line); border-radius: 0.7rem; padding: 0.6rem 0.7rem; font-size: 0.88rem; }
-        .box b { display: block; }
-        .flow .box b { display: block; color: var(--cyan); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.15rem; }
-        .flow .arrow { align-self: center; color: var(--muted); font-size: 0.78rem; text-align: center; flex: 0 0 auto; min-width: 3.2rem; }
-        .flow .arrow::before { content: "→"; display: block; font-size: 1.5rem; color: var(--green); line-height: 1; }
-        @media (max-width: 700px) { .flow { flex-direction: column; } .flow .box { flex: 0 0 auto; } .flow .arrow::before { content: "↓"; } }
-        .db { margin-top: 0.8rem; display: flex; justify-content: center; }
-        .db .box { max-width: 26rem; text-align: center; border-color: rgba(255, 210, 123, 0.5); }
-        .db .box b { color: var(--yellow); }
-
-        .pill { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 0.12rem 0.65rem; font-size: 0.8rem; color: var(--muted); margin: 0 0.25rem 0.3rem 0; }
-        .step-n { display: inline-block; min-width: 1.5rem; text-align: center; background: var(--cyan); color: #04101c; border-radius: 999px; font-weight: 700; font-size: 0.8rem; margin-right: 0.4rem; }
-        .btn { display: inline-block; background: var(--green); color: #04101c; font-weight: 700; text-decoration: none; padding: 0.6rem 1.1rem; border-radius: 0.6rem; margin-top: 0.4rem; }
-        .btn.ghost { background: transparent; color: var(--cyan); border: 1px solid var(--cyan); margin-left: 0.4rem; }
-
-        .agenda { list-style: none; margin: 0; counter-reset: punto; }
-        .agenda li { counter-increment: punto; background: var(--panel); border: 1px solid var(--line); border-radius: 0.8rem; padding: 0.7rem 1rem; margin-bottom: 0.6rem; font-size: 1.05rem; }
-        .agenda li::before { content: counter(punto); display: inline-block; width: 2rem; height: 2rem; line-height: 2rem; text-align: center; border-radius: 50%; background: var(--green); color: #04101c; font-weight: 700; margin-right: 0.8rem; }
-        .agenda a { color: var(--text); text-decoration: none; }
-        .agenda small { color: var(--muted); display: block; margin-left: 2.8rem; }
-
-        .refs { font-size: 0.88rem; margin-left: 1.1rem; }
-        .refs li { margin-bottom: 0.45rem; }
-
-        /* notas del orador */
-        .notas { display: none; margin-top: 1rem; border: 1px dashed var(--yellow); border-radius: 0.7rem; padding: 0.7rem 0.9rem; color: var(--yellow); font-size: 0.88rem; background: rgba(255, 210, 123, 0.05); }
-        .notas strong { color: var(--yellow); }
-        body.ver-notas .notas { display: block; }
-
-        .pie { position: absolute; left: clamp(1rem, 5vw, 4.5rem); right: clamp(1rem, 5vw, 4.5rem); bottom: 0.7rem; display: flex; justify-content: space-between; color: var(--muted); font-size: 0.72rem; }
+        .pie { position: absolute; right: clamp(1rem, 5vw, 4.5rem); bottom: 0.7rem; left: clamp(1rem, 5vw, 4.5rem); display: flex; justify-content: space-between; color: var(--muted); font-size: 0.72rem; }
         .slide > .pie { width: auto; max-width: none; margin: 0; }
 
-        /* barra de control (solo pantalla) */
-        .barra { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.8rem; background: rgba(8, 13, 24, 0.88); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); font-size: 0.78rem; color: var(--muted); }
-        .barra .prog { flex: 1; height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; }
-        .barra .prog i { display: block; height: 100%; width: 0; background: var(--green); transition: width 0.2s; }
-        .barra button, .barra a { background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 0.4rem; padding: 0.15rem 0.55rem; font: inherit; cursor: pointer; text-decoration: none; }
-        .barra button:hover, .barra a:hover { border-color: var(--cyan); }
-        .barra button[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }
-        @media (max-width: 520px) { .barra .atajos, .barra strong { display: none; } .barra { gap: 0.4rem; padding: 0.35rem 0.5rem; } .barra .prog { min-width: 0; } }
-
+        /* ---------- Barra superior (solo pantalla) ---------- */
+        .barra {
+            position: fixed; top: 0; right: 0; left: 0; z-index: 10;
+            display: flex; align-items: center; gap: 0.7rem; padding: 0.4rem 0.9rem;
+            border-bottom: 1px solid var(--line); background: rgba(6, 10, 20, 0.78);
+            -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+            color: var(--muted); font-size: 0.78rem;
+        }
+        .barra .prog { flex: 1; height: 4px; overflow: hidden; border-radius: 4px; background: var(--line); }
+        .barra .prog i { display: block; width: 0; height: 100%; background: var(--green); transition: width 0.2s; }
+        .barra a { padding: 0.15rem 0.6rem; border: 1px solid var(--line); border-radius: 0.5rem; color: var(--text); text-decoration: none; }
+        .barra a:hover { border-color: var(--cyan); }
+        @media (max-width: 560px) { .barra .atajos, .barra strong { display: none; } }
         @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
         /* ---------- Impresión / PDF: una diapositiva 16:9 por página ---------- */
         @page { size: 1280px 720px; margin: 0; }
         @media print {
-            html { font-size: 19.5px; scroll-snap-type: none; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .barra, .notas { display: none !important; }
-            .slide { width: 1280px; height: 720px; min-height: 0; padding: 2.6rem 3.6rem 2.2rem; break-after: page; page-break-after: always; overflow: hidden; border: 0; }
+            html { font-size: 19px; scroll-snap-type: none; }
+            body { background: var(--bg); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .barra, .btn { display: none !important; }
+            .slide { width: 1280px; height: 720px; min-height: 0; padding: 2.4rem 3.4rem 2.2rem; overflow: hidden; border: 0; break-after: page; page-break-after: always; }
             .slide:last-of-type { break-after: auto; page-break-after: auto; }
-            .btn { display: none; }
         }
     </style>
 </head>
 <body>
 
 <div class="barra" role="navigation" aria-label="Control de la presentación">
-    <strong>ECG · Teoría de Señales</strong>
+    <strong>ECG con Arduino</strong>
     <div class="prog" aria-hidden="true"><i id="progreso"></i></div>
-    <span id="contador">1 / 17</span>
-    <span class="atajos">← → navegar · N notas · F pantalla completa</span>
-    <button id="btnNotas" type="button" aria-pressed="false">Notas</button>
+    <span id="contador">1 / 8</span>
+    <span class="atajos">← → para avanzar · F pantalla completa</span>
     <a href="../index.html">Simulador</a>
 </div>
 
@@ -144,459 +171,229 @@
 <section class="slide" id="portada">
     <div>
         <p class="kicker">Universidad de Manizales · Teoría de Señales</p>
-        <h1>Simulación y adquisición de ECG con análisis en frecuencia y filtrado digital</h1>
-        <p class="lead">Generador de ECG + Arduino AD8232 + Node.js, Express, Sequelize y MySQL</p>
-        <p style="margin-top:1.4rem"><strong>Jerónimo Soto Villada</strong><br><strong>Milady Cristina Guapacha Montoya</strong></p>
-        <p class="muted" style="margin-top:1rem">Sustentación final del proyecto semestral</p>
-        <p style="margin-top:1rem"><span class="pill">fs = 250 Hz</span><span class="pill">FFT</span><span class="pill">Filtros IIR</span><span class="pill">Pan-Tompkins</span><span class="pill">Arduino</span></p>
-        <aside class="notas"><strong>Ambos.</strong> Saluden, digan sus nombres y que el proyecto es educativo (no diagnóstico). Duración sugerida: 15 s.</aside>
+        <h1>Electrocardiograma con Arduino:<br>del latido a los números</h1>
+        <p class="lead">Medimos la señal eléctrica del corazón, la limpiamos con filtros digitales y calculamos los latidos por minuto.</p>
+        <p style="margin-top:1.3rem"><strong>Jerónimo Soto Villada</strong><br><strong>Milady Cristina Guapacha Montoya</strong></p>
+        <p style="margin-top:1rem"><span class="pill">Arduino + AD8232</span><span class="pill">Muestreo a 250 Hz</span><span class="pill">FFT</span><span class="pill">Filtros digitales</span><span class="pill">Frecuencia cardíaca</span></p>
     </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>1</span></div>
 </section>
 
-<!-- 2 · Agenda -->
-<section class="slide" id="agenda">
+<!-- 2 · Qué hicimos -->
+<section class="slide" id="proyecto">
     <div>
-        <p class="kicker">Guion</p>
-        <h2>Lo que vamos a mostrar</h2>
-        <ol class="agenda">
-            <li><a href="#problema">Presentación del proyecto</a><small>Problema, objetivo y solución desarrollada</small></li>
-            <li><a href="#demo">Demostración de funcionamiento</a><small>El sistema en ejecución y sus funciones</small></li>
-            <li><a href="#senal">Análisis de señales</a><small>Representación temporal y frecuencial, ruido y procesamiento</small></li>
-            <li><a href="#resultados">Resultados y validación</a><small>Qué comprobamos, alcances y limitaciones</small></li>
-            <li><a href="#conclusiones">Conclusiones</a><small>Aprendizajes y relación con Teoría de Señales</small></li>
-        </ol>
-        <aside class="notas"><strong>Integrante A:</strong> puntos 1 y 2. <strong>Integrante B:</strong> puntos 3 y 4. <strong>Ambos:</strong> punto 5 y preguntas. Cámbienlo si prefieren, pero los dos deben saber todo.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 3 · Problema -->
-<section class="slide" id="problema">
-    <div>
-        <p class="kicker">1 · Presentación del proyecto</p>
-        <h2>El problema: medir el pulso a partir de una señal sucia</h2>
+        <p class="kicker">El proyecto</p>
+        <h2>Qué hicimos</h2>
+        <p class="lead">Una página web que muestra el electrocardiograma en tiempo real, lo limpia y calcula la frecuencia cardíaca.</p>
+        <div class="flow" aria-label="Recorrido de la señal">
+            <div class="box"><b>Electrodos</b>Captan la señal del corazón (≈ 1 mV)</div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="box"><b>AD8232</b>La amplifica unas 1100 veces</div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="box"><b>Arduino</b>La convierte en números 250 veces por segundo</div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="box"><b>Página web</b>Filtra, dibuja y calcula el BPM</div>
+        </div>
         <div class="cols">
-            <div>
-                <p>El electrocardiograma (ECG) registra la actividad eléctrica del corazón. Como señal tiene tres retos que son justo los temas del curso:</p>
-                <ul>
-                    <li><strong>Es analógica:</strong> hay que <em>muestrear</em> y digitalizarla.</li>
-                    <li><strong>Banda limitada:</strong> la energía útil está entre 0.5 y ~100 Hz.</li>
-                    <li><strong>Llega contaminada</strong> por interferencias y ruido.</li>
-                </ul>
-            </div>
-            <div class="card">
-                <h3>Quién contamina la señal</h3>
-                <ul>
-                    <li><strong>Deriva de línea base</strong> (&lt; 0.5 Hz): respiración, movimiento.</li>
-                    <li><strong>Red eléctrica</strong> (60 Hz): una sinusoide estrecha.</li>
-                    <li><strong>Ruido muscular y térmico</strong>: banda ancha, alta frecuencia.</li>
-                </ul>
-                <p class="accent" style="margin-top:0.5rem">Pregunta guía: ¿cómo obtener la frecuencia cardíaca fiable a partir de esto?</p>
-            </div>
+            <div class="card hl"><h3>Sin sensor también funciona</h3><p>La página genera un ECG simulado. Se le puede añadir ruido y quitárselo con los filtros para ver qué hace cada uno.</p></div>
+            <div class="card"><h3>Se abre desde cualquier celular</h3><p>Está publicada en Internet. Con el Arduino conectado al computador, la señal real aparece en el mismo monitor.</p></div>
         </div>
-        <aside class="notas"><strong>A.</strong> Idea clave: el ECG reúne casi todos los conceptos de la asignatura (muestreo, periodicidad, Fourier, ruido, filtros). Es un proyecto <em>educativo</em>.</aside>
     </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>2</span></div>
 </section>
 
-<!-- 4 · Objetivo y solución -->
-<section class="slide" id="solucion">
-    <div>
-        <p class="kicker">1 · Presentación del proyecto</p>
-        <h2>Objetivo y solución desarrollada</h2>
-        <p><strong>Objetivo:</strong> generar o adquirir un ECG, representarlo en tiempo y frecuencia, filtrarlo y calcular la frecuencia cardíaca (BPM), integrando hardware, servidor y base de datos.</p>
-        <div class="cols cols-3" style="margin-top:0.8rem">
-            <div class="card hl"><h3>1 · Simulador web</h3><p>HTML + CSS + JS. Generador P-Q-R-S-T, controles de BPM, amplitud y ruido, canvas en tiempo real y panel de teoría.</p></div>
-            <div class="card hl"><h3>2 · Procesamiento</h3><p>Filtros digitales y detector de picos R (Pan-Tompkins) en el navegador. FFT y filtrado de fase cero en Python (SciPy).</p></div>
-            <div class="card hl"><h3>3 · Integración</h3><p>Arduino + AD8232 por serial, servidor Node.js con flujo en tiempo real y MySQL (Sequelize) para usuarios e historial.</p></div>
-        </div>
-        <aside class="notas"><strong>A.</strong> Nombren siempre las tres capas en este orden. Sin hardware el sistema funciona con un Arduino simulado que habla el mismo protocolo serial.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 5 · Arquitectura -->
-<section class="slide" id="arquitectura">
-    <div>
-        <p class="kicker">1 · Presentación del proyecto</p>
-        <h2>Cómo viaja una muestra, del electrodo a la pantalla</h2>
-        <div class="flow">
-            <div class="box"><b>Arduino Uno + AD8232</b>ADC de 10 bits en A0, líneas de texto <code>S,512</code></div>
-            <div class="arrow">USB serial<br>115200 baud</div>
-            <div class="box"><b>Servidor Node.js</b>Express + serialport: ADC → mV, grupos de 40 ms</div>
-            <div class="arrow">SSE + REST<br>cookie JWT</div>
-            <div class="box"><b>Navegador</b>EventSource → filtros → detector → canvas</div>
-        </div>
-        <div class="db"><div class="box"><b>MySQL (XAMPP) vía Sequelize</b>usuarios · mediciones de BPM · comandos_log</div></div>
-        <p class="muted" style="margin-top:0.8rem">Los comandos (PING, LED, START/STOP, FS) viajan en sentido contrario por POST y el Arduino responde con confirmación (ACK).</p>
-        <aside class="notas"><strong>A.</strong> ¿Por qué SSE? El flujo es en un solo sentido (servidor → navegador), es simple, se reconecta solo y funciona sobre HTTP. Contraseñas con bcrypt; Sequelize usa consultas parametrizadas.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 6 · Demostración -->
-<section class="slide" id="demo">
-    <div>
-        <p class="kicker">2 · Demostración de funcionamiento</p>
-        <h2>El sistema en ejecución</h2>
-        <div class="cols">
-            <div>
-                <ol style="list-style:none; margin-left:0">
-                    <li><span class="step-n">1</span>Monitor ECG simulado: se ven P, QRS y T; abajo, BPM, <i>f</i> = BPM/60 y RR.</li>
-                    <li><span class="step-n">2</span>Mover BPM, amplitud y ruido gaussiano.</li>
-                    <li><span class="step-n">3</span>Activar red de 60 Hz y deriva de línea base.</li>
-                    <li><span class="step-n">4</span>Activar los filtros uno por uno.</li>
-                    <li><span class="step-n">5</span>Crear cuenta · PING · LED · frecuencia de muestreo.</li>
-                    <li><span class="step-n">6</span>Usar señal del Arduino · guardar historial en MySQL.</li>
-                    <li><span class="step-n">7</span><code>npm run analyze</code> y <code>npm test</code>.</li>
-                </ol>
-            </div>
-            <div>
-                <div class="card hl">
-                    <h3>Prueba el simulador desde tu celular</h3>
-                    <p>La versión web incluye el simulador, los filtros y la detección de BPM. Sesión, Arduino e historial requieren el servidor local.</p>
-                    <a class="btn" href="../index.html">Abrir el simulador</a>
-                </div>
-                <div class="card alert" style="margin-top:0.7rem">
-                    <h3>Plan B</h3>
-                    <p>Sin sensor: <code>ARDUINO_MODE=simulate</code> (decirlo con claridad). Sin MySQL: simulador web + video de respaldo.</p>
-                </div>
-            </div>
-        </div>
-        <aside class="notas"><strong>A.</strong> 15 min antes: XAMPP → MySQL en Start; <code>npm start</code>; cuenta creada; Monitor Serie del IDE cerrado. Digan siempre si la señal que muestran es real o simulada.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 7 · Señal y parámetros -->
+<!-- 3 · La señal y el muestreo -->
 <section class="slide" id="senal">
     <div>
-        <p class="kicker">3 · Análisis de señales</p>
-        <h2>La señal y sus parámetros</h2>
+        <p class="kicker">La señal</p>
+        <h2>La señal del corazón y cómo se digitaliza</h2>
         <div class="cols">
-            <div class="table-wrap">
-                <table>
-                    <tr><th>Parámetro</th><th class="num">Valor</th></tr>
-                    <tr><td>Frecuencia de muestreo <i>f<sub>s</sub></i></td><td class="num">250 Hz</td></tr>
-                    <tr><td>Periodo de muestreo <i>T<sub>s</sub></i> = 1/<i>f<sub>s</sub></i></td><td class="num">4 ms</td></tr>
-                    <tr><td>Nyquist <i>f<sub>s</sub></i>/2</td><td class="num">125 Hz</td></tr>
-                    <tr><td>Ventana de análisis (8 s)</td><td class="num"><i>N</i> = 2000</td></tr>
-                    <tr><td>Resolución Δ<i>f</i> = <i>f<sub>s</sub></i>/<i>N</i></td><td class="num">0.125 Hz</td></tr>
-                    <tr><td>Ritmo de referencia</td><td class="num">75 lpm → 1.25 Hz</td></tr>
-                    <tr><td>ADC del Arduino</td><td class="num">10 bits · ≈ 4.4 µV/cuenta</td></tr>
-                </table>
-            </div>
             <div>
-                <div class="card">
-                    <h3>Modelo del ECG sintético</h3>
-                    <p>Cinco gaussianas (P, Q, R, S, T) dentro de cada periodo <i>T</i> = 60/BPM más ruido:</p>
-                    <div class="eq">x(t) = Σ aᵢ·exp(−(t − μᵢ)² / 2σᵢ²) + η(t)</div>
-                    <p class="muted">El ancho temporal fija el ancho de banda: σ<sub>f</sub> = 1/(2π σ<sub>t</sub>). El QRS (angosto) tiene frecuencias más altas que la onda T (ancha).</p>
-                </div>
-                <p style="margin-top:0.6rem">Tres orígenes: <strong>sintético</strong>, <strong>Arduino</strong> (ADC → mV) y <strong>ruido controlado</strong>.</p>
-            </div>
-        </div>
-        <aside class="notas"><strong>B.</strong> ¿Por qué 250 Hz? La energía útil llega a ~100 Hz; con Nyquist de 125 Hz hay margen. Con fs menor a 2·fmax habría aliasing (60 Hz a 100 Hz de muestreo aparecería en 40 Hz). Con 8 s caben 10 latidos exactos a 75 lpm: la fundamental cae en un bin de la FFT.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 8 · Tiempo -->
-<section class="slide" id="tiempo">
-    <div>
-        <p class="kicker">3 · Análisis de señales · dominio del tiempo</p>
-        <h2>Qué se ve en el tiempo</h2>
-        <div class="cols cols-wide-left">
-            <figure><img src="img/panel_tiempo.png" alt="ECG con ruido, red de 60 Hz y deriva durante 8 segundos, con diez picos R separados 0.8 s"><figcaption>ECG con ruido, 60 Hz y deriva · 75 lpm · 8 s</figcaption></figure>
-            <div>
-                <ul>
-                    <li><strong>10 picos R</strong> (≈ 1.2 mV) cada <strong>0.8 s</strong>: señal cuasi-periódica, <i>T</i> = 60/BPM.</li>
-                    <li>La línea base «respira» entre ≈ −0.5 y +0.5 mV: <strong>deriva</strong> de 0.15 Hz.</li>
-                    <li>El zumbido grueso es la red de <strong>60 Hz</strong> más ruido gaussiano; tapa las ondas P y T.</li>
+                <svg class="beat" viewBox="0 0 520 200" role="img" aria-label="Dos latidos de un electrocardiograma con las ondas P, Q, R, S y T y el intervalo RR entre los dos picos R">
+                    <defs><marker id="flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#7ddcff"/></marker></defs>
+                    <path d="M0 140 H85 Q100 120 115 140 H148 L153 151 L160 32 L168 166 L176 140 H200 Q225 106 250 140 H305 Q320 120 335 140 H368 L373 151 L380 32 L388 166 L396 140 H420 Q445 106 470 140 H520" fill="none" stroke="#5ef2c2" stroke-width="3" stroke-linejoin="round"/>
+                    <line x1="160" y1="16" x2="380" y2="16" stroke="#7ddcff" stroke-width="2" marker-start="url(#flecha)" marker-end="url(#flecha)"/>
+                    <text x="270" y="11" fill="#7ddcff" font-size="15" text-anchor="middle" font-family="Cambria, Georgia, serif"><tspan font-style="italic">T</tspan><tspan font-size="10" dy="4" font-style="italic">RR</tspan><tspan dy="-4"> = tiempo entre latidos</tspan></text>
+                    <g fill="#eef4ff" font-size="16" font-family="Cambria, Georgia, serif" font-weight="bold" text-anchor="middle">
+                        <text x="100" y="112">P</text><text x="146" y="172">Q</text><text x="172" y="40">R</text><text x="178" y="186">S</text><text x="225" y="98">T</text>
+                    </g>
+                </svg>
+                <ul class="small">
+                    <li><strong>P:</strong> se contraen las aurículas.</li>
+                    <li><strong>QRS:</strong> se contraen los ventrículos (el pico más alto).</li>
+                    <li><strong>T:</strong> el corazón se recupera.</li>
                 </ul>
-                <div class="table-wrap">
-                    <table>
-                        <tr><th>Medida</th><th class="num">Con ruido</th><th class="num">Limpia</th></tr>
-                        <tr><td>Mínimo (mV)</td><td class="num">−0.939</td><td class="num">−0.212</td></tr>
-                        <tr><td>Máximo (mV)</td><td class="num">1.611</td><td class="num">1.187</td></tr>
-                        <tr><td>Media (mV)</td><td class="num">0.089</td><td class="num">0.061</td></tr>
-                        <tr><td>RMS (mV)</td><td class="num">0.408</td><td class="num">0.185</td></tr>
-                    </table>
+            </div>
+            <div>
+                <div class="libro">
+                    <p class="nota"><b>Período y frecuencia del latido</b></p>
+                    $$T_{RR} = \frac{60}{\text{BPM}} \qquad f = \frac{\text{BPM}}{60} \tag{1}$$
+                    <p class="ejemplo">Ejemplo: con 75 lpm, \(T_{RR} = 0.8\ \text{s}\) y \(f = 1.25\ \text{Hz}\).</p>
+                </div>
+                <div class="libro">
+                    <p class="nota"><b>Teorema de muestreo (Nyquist)</b></p>
+                    $$f_s \ge 2\, f_{\max} \qquad T_s = \frac{1}{f_s} \tag{2}$$
+                    <p class="ejemplo">El ECG llega hasta ≈ 100 Hz; muestreamos a \(f_s = 250\ \text{Hz}\), es decir, una muestra cada \(T_s = 4\ \text{ms}\).</p>
                 </div>
             </div>
         </div>
-        <aside class="notas"><strong>B.</strong> Eje X: tiempo en segundos; eje Y: amplitud en mV. Los valores salen de <code>results/caracterizacion.md</code>. El intervalo RR es el periodo del latido.</aside>
     </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>3</span></div>
 </section>
 
-<!-- 9 · Frecuencia -->
-<section class="slide" id="frecuencia">
-    <div>
-        <p class="kicker">3 · Análisis de señales · dominio de la frecuencia</p>
-        <h2>Qué se ve en la FFT</h2>
-        <div class="cols">
-            <div>
-                <figure><img src="img/panel_zoom.png" alt="Zoom del espectro de 0 a 15 Hz con líneas cada 1.25 Hz y un máximo de deriva cerca de 0 Hz"><figcaption>Zoom 0–15 Hz: líneas cada 1.25 Hz = BPM/60</figcaption></figure>
-                <figure style="margin-top:0.6rem"><img src="img/panel_fft.png" alt="Espectro de 0 a 100 Hz con una línea aislada en 60 Hz"><figcaption>Espectro 0–100 Hz: la red aparece como una línea en 60 Hz</figcaption></figure>
-            </div>
-            <div>
-                <p class="muted">Eje X: frecuencia (0 a <i>f<sub>s</sub></i>/2). Eje Y: amplitud de la sinusoide equivalente (mV).</p>
-                <table>
-                    <tr><th>Componente</th><th class="num">Frecuencia</th><th class="num">Magnitud</th></tr>
-                    <tr><td>Deriva de línea base</td><td class="num">≈ 0.13 Hz</td><td class="num">0.36 mV</td></tr>
-                    <tr><td>Fundamental (75 lpm)</td><td class="num">1.25 Hz</td><td class="num">0.05 mV</td></tr>
-                    <tr><td>Armónicos más altos</td><td class="num">3.75 y 5.0 Hz</td><td class="num">0.08 mV</td></tr>
-                    <tr><td>Red eléctrica</td><td class="num">60 Hz</td><td class="num">0.26 mV</td></tr>
-                </table>
-                <div class="card hl" style="margin-top:0.7rem">
-                    <p><strong>La fundamental no es la línea más alta.</strong> El QRS es angosto (~25 ms) y reparte su energía en muchos armónicos. El BPM sale de la <em>separación</em> entre líneas: medido en la FFT, <span class="accent"><strong>1.250 Hz → 75.0 lpm</strong></span>.</p>
-                </div>
-            </div>
-        </div>
-        <aside class="notas"><strong>B.</strong> Si preguntan «¿por qué el pico mayor está cerca de 0 Hz?»: es la deriva de 0.15 Hz con amplitud 0.4, más ancha que un bin porque 8 s contienen solo 1.2 de sus periodos (fuga espectral). Se resta la media antes de la FFT para que el bin de 0 Hz no domine.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 10 · Ruido -->
+<!-- 4 · El ruido en la FFT -->
 <section class="slide" id="ruido">
     <div>
-        <p class="kicker">3 · Análisis de señales · ruido y degradación</p>
-        <h2>Cada interferencia vive en una zona distinta del espectro</h2>
-        <div class="table-wrap">
-            <table>
-                <tr><th>Perturbación</th><th>Parámetros del modelo</th><th>Aspecto en el espectro</th><th>Cómo se combate</th></tr>
-                <tr><td><strong>Deriva de línea base</strong></td><td>0.40 mV · 0.15 Hz</td><td>Máximo muy cerca de 0 Hz</td><td>Pasa-altas 0.5 Hz</td></tr>
-                <tr><td><strong>Red eléctrica</strong></td><td>0.25 mV · 60 Hz</td><td>Una sola línea, muy angosta</td><td>Notch en 60 Hz</td></tr>
-                <tr><td><strong>Ruido gaussiano / muscular</strong></td><td>σ = 0.15 mV</td><td>Piso parejo en todas las frecuencias</td><td>Pasa-bajas 40 Hz (atenúa lo de alta frecuencia)</td></tr>
-            </table>
-        </div>
-        <div class="card" style="margin-top:0.9rem">
-            <p>Una sinusoide pura ocupa una frecuencia: por eso los 60 Hz son una línea. El ruido blanco ocupa todas: por eso eleva el piso. Mirar el espectro permite <strong>elegir cada filtro con criterio</strong> en vez de probar a ciegas.</p>
-        </div>
-        <aside class="notas"><strong>B.</strong> En Colombia la red es de 60 Hz; en países de 50 Hz habría que mover el notch. El ruido gaussiano es solo una aproximación del ruido muscular real (EMG), que tiene otro espectro.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 11 · Filtros -->
-<section class="slide" id="filtros">
-    <div>
-        <p class="kicker">3 · Análisis de señales · procesamiento</p>
-        <h2>Tres filtros digitales, tres ecuaciones en diferencias</h2>
-        <div class="cols cols-3">
-            <div class="card">
-                <h3>Pasa-altas 0.5 Hz</h3>
-                <div class="eq">y[n] = α·(y[n−1] + x[n] − x[n−1])
-α = 1 / (1 + 2π·f<sub>c</sub>·T<sub>s</sub>)</div>
-                <p class="muted">Ganancia medida: 0.15 Hz → <strong>0.29</strong> · 1.25 Hz → 0.92 · 10 Hz → 0.99</p>
-            </div>
-            <div class="card">
-                <h3>Notch 60 Hz</h3>
-                <div class="eq">ceros en ±ω₀ (círculo unidad)
-polos en radio r = 0.95</div>
-                <p class="muted">Ganancia medida: 60 Hz → <strong>0.000</strong>; el resto de la banda del ECG pasa casi igual (≈ 1.05).</p>
-            </div>
-            <div class="card">
-                <h3>Pasa-bajas 40 Hz</h3>
-                <div class="eq">y[n] = y[n−1] + α·(x[n] − y[n−1])
-α ≈ 0.605 (−3 dB en f<sub>c</sub>)</div>
-                <p class="muted">Ganancia medida: 5 Hz → 1.00 · 40 Hz → <strong>0.707</strong> · 100 Hz → 0.45</p>
-            </div>
-        </div>
-        <p style="margin-top:0.8rem">En el navegador son <strong>causales</strong> (solo muestras pasadas: sirven en tiempo real). En Python se usa <code>filtfilt</code> (Butterworth 2.º orden, <strong>fase cero</strong>): no distorsiona la fase, pero solo sirve fuera de línea.</p>
-        <aside class="notas"><strong>B.</strong> Detalle para lucirse: la fórmula α = ωTs/(1+ωTs) del pasa-bajas solo vale si fc ≪ fs; con 40 Hz y 250 Hz daría un corte real cercano a 29 Hz. Usamos el α que da exactamente −3 dB en 40 Hz y lo comprobamos con una prueba automática.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 12 · Pan-Tompkins -->
-<section class="slide" id="deteccion">
-    <div>
-        <p class="kicker">3 · Análisis de señales · procesamiento</p>
-        <h2>De la señal al BPM: detector de QRS (Pan-Tompkins)</h2>
-        <div class="flow">
-            <div class="box"><b>1 · Pasa-banda</b>5–15 Hz: deja el QRS</div>
-            <div class="arrow"></div>
-            <div class="box"><b>2 · Derivada</b>5 puntos: resalta la pendiente</div>
-            <div class="arrow"></div>
-            <div class="box"><b>3 · Al cuadrado</b>todo positivo, pesa lo grande</div>
-            <div class="arrow"></div>
-            <div class="box"><b>4 · Integración</b>ventana móvil de 150 ms</div>
-            <div class="arrow"></div>
-            <div class="box"><b>5 · Umbral</b>adaptativo entre ruido y señal</div>
-        </div>
-        <div class="cols" style="margin-top:0.9rem">
-            <div class="card">
-                <h3>Del latido al BPM</h3>
-                <div class="eq">BPM = 60 / T_RR        f = BPM / 60  (Hz)</div>
-                <p>Se usa la <strong>mediana de los últimos 5 intervalos RR</strong>, así un latido perdido o falso no arruina la medida. Ejemplo: RR = 0.8 s → 75 lpm → 1.25 Hz.</p>
-            </div>
-            <div class="card">
-                <h3>Dos detalles de ingeniería</h3>
-                <ul>
-                    <li>El pico R se localiza como el máximo del pasa-banda en los 200 ms previos: el máximo de la señal integrada «baila» ±30 ms.</li>
-                    <li>Mientras se calibra (≈ 2 s + 2 latidos) se muestra <strong>«--»</strong> en vez de inventar un valor.</li>
-                </ul>
-            </div>
-        </div>
-        <aside class="notas"><strong>B.</strong> Es el algoritmo de Pan y Tompkins (1985) con umbral adaptativo (SPK/NPK) y periodo refractario de 250 ms. Antes teníamos una versión simplificada con umbral fijo que fallaba con ciertos BPM y ruido; la reemplazamos y la validamos con pruebas.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 13 · Resultados filtrado -->
-<section class="slide" id="resultados">
-    <div>
-        <p class="kicker">4 · Resultados y validación</p>
-        <h2>Resultado: la señal limpia conserva el latido</h2>
+        <p class="kicker">El ruido</p>
+        <h2>Cada ruido aparece en una frecuencia distinta</h2>
         <div class="cols">
             <div>
-                <figure><img src="img/filtrado_tiempo.png" alt="Señal cruda en rosa y señal filtrada en verde, donde se ven con claridad los picos R"><figcaption>Cruda (rosa) vs. filtrada (verde): HP 0.5 Hz + notch 60 Hz + LP 40 Hz</figcaption></figure>
-            </div>
-            <div>
-                <figure><img src="img/filtrado_frecuencia.png" alt="Espectro crudo y filtrado: desaparecen la deriva y la línea de 60 Hz"><figcaption>Espectros: desaparecen la deriva y los 60 Hz</figcaption></figure>
-            </div>
-        </div>
-        <div class="cols" style="margin-top:0.8rem">
-            <div class="card hl">
-                <p class="muted">RMS del error respecto a la señal limpia</p>
-                <p class="big-number">0.368 → 0.083 mV</p>
-                <p>≈ 4.4 veces menos error tras filtrar.</p>
-            </div>
-            <div class="card alert">
-                <p><strong>Compromiso:</strong> el pico R baja de ≈ 1.2–1.6 mV a ≈ 1.0 mV. Limpiar ruido cuesta algo de la forma de onda.</p>
-            </div>
-        </div>
-        <aside class="notas"><strong>B.</strong> Las gráficas salen de <code>scripts/analisis_fft.py</code> con semilla fija (se pueden reproducir). El error se mide contra la señal limpia sin componente continua y sin 0.5 s en los extremos (efecto de borde del filtro).</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 14 · Validación -->
-<section class="slide" id="validacion">
-    <div>
-        <p class="kicker">4 · Resultados y validación</p>
-        <h2>Cómo comprobamos que funciona</h2>
-        <div class="cols">
-            <div>
-                <div class="card hl">
-                    <h3>24 pruebas automáticas (<code>npm test</code>)</h3>
-                    <ul>
-                        <li><strong>5</strong> del puente Arduino: protocolo, comandos válidos e inválidos, conversión a mV, electrodos sueltos.</li>
-                        <li><strong>9</strong> de la API: registro, login, bcrypt, inyección SQL, permisos, SSE, historial, logout.</li>
-                        <li><strong>10</strong> de DSP: precisión del detector, continuidad del generador y respuesta de los filtros.</li>
-                    </ul>
-                </div>
-                <p style="margin-top:0.7rem"><code>npm run db:check</code> verifica Sequelize ↔ MySQL. La FFT recupera <strong>1.250 Hz → 75.0 lpm</strong>.</p>
-            </div>
-            <div>
-                <h3>BPM medido por el detector (30 s de señal)</h3>
+                <p>La <strong>FFT</strong> separa la señal en sus frecuencias. Así se ve dónde está cada problema:</p>
                 <div class="table-wrap">
                     <table>
-                        <tr><th class="num">BPM real</th><th class="num">Normal</th><th class="num">Ruido 30 % + 60 Hz + deriva</th><th class="num">Amplitud 0.5×</th></tr>
-                        <tr><td class="num">40</td><td class="num">40</td><td class="num">40</td><td class="num">40</td></tr>
-                        <tr><td class="num">60</td><td class="num">60</td><td class="num">60</td><td class="num">60</td></tr>
-                        <tr><td class="num">75</td><td class="num">75</td><td class="num">75</td><td class="num">75</td></tr>
-                        <tr><td class="num">90</td><td class="num">90</td><td class="num">90</td><td class="num">90</td></tr>
-                        <tr><td class="num">120</td><td class="num">120</td><td class="num">120</td><td class="num">120</td></tr>
-                        <tr><td class="num">150</td><td class="num">150</td><td class="num">150</td><td class="num">150</td></tr>
-                        <tr><td class="num">180</td><td class="num">181</td><td class="num">181</td><td class="num">181</td></tr>
+                        <tr><th>Ruido</th><th>Dónde aparece</th><th>Filtro</th></tr>
+                        <tr><td><strong>Deriva</strong> (respiración, movimiento)</td><td>Menos de 0.5 Hz</td><td>Pasa-altas</td></tr>
+                        <tr><td><strong>Red eléctrica</strong></td><td>Exactamente 60 Hz</td><td>Notch</td></tr>
+                        <tr><td><strong>Ruido muscular</strong></td><td>Frecuencias altas</td><td>Pasa-bajas</td></tr>
                     </table>
+                </div>
+                <p class="muted small" style="margin-top:0.6rem">Los latidos se ven como líneas cada 1.25 Hz, que es justamente \(f = \text{BPM}/60\) para 75 lpm.</p>
+            </div>
+            <figure><img src="img/panel_fft.png" alt="Espectro de 0 a 100 Hz: la red eléctrica aparece como una línea aislada en 60 Hz"><figcaption>Espectro de la señal con ruido: la línea de 60 Hz es la red eléctrica</figcaption></figure>
+        </div>
+    </div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>4</span></div>
+</section>
+
+<!-- 5 · Filtros -->
+<section class="slide" id="filtros">
+    <div>
+        <p class="kicker">Los filtros</p>
+        <h2>Tres filtros, uno para cada ruido</h2>
+        <div class="filtro">
+            <div><h3>Pasa-altas · 0.5 Hz</h3><p class="small muted">Quita la deriva lenta de la línea base.</p></div>
+            <div class="libro">
+                <div class="ancho">$$y[n] = \alpha\,\bigl(y[n-1] + x[n] - x[n-1]\bigr), \qquad \alpha = \frac{1}{1 + 2\pi f_c T_s} \tag{3}$$</div>
+                <div class="angosto">$$y[n] = \alpha\,\bigl(y[n-1] + x[n] - x[n-1]\bigr)$$ $$\alpha = \frac{1}{1 + 2\pi f_c T_s}$$</div>
+            </div>
+        </div>
+        <div class="filtro">
+            <div><h3>Notch · 60 Hz</h3><p class="small muted">Elimina solo la frecuencia de la red eléctrica.</p></div>
+            <div class="libro">
+                <div class="ancho">$$H(z) = \frac{1 - 2\cos\omega_0\, z^{-1} + z^{-2}}{1 - 2r\cos\omega_0\, z^{-1} + r^2 z^{-2}}, \qquad \omega_0 = 2\pi\,\frac{60}{f_s},\ \ r = 0.95 \tag{4}$$</div>
+                <div class="angosto">$$H(z) = \frac{1 - 2\cos\omega_0\, z^{-1} + z^{-2}}{1 - 2r\cos\omega_0\, z^{-1} + r^2 z^{-2}}$$ $$\omega_0 = 2\pi\,\frac{60}{f_s}, \quad r = 0.95$$</div>
+            </div>
+        </div>
+        <div class="filtro">
+            <div><h3>Pasa-bajas · 40 Hz</h3><p class="small muted">Suaviza el ruido rápido (muscular).</p></div>
+            <div class="libro">
+                <div class="ancho">$$y[n] = y[n-1] + \alpha\,\bigl(x[n] - y[n-1]\bigr), \qquad \alpha \approx 0.605 \tag{5}$$</div>
+                <div class="angosto">$$y[n] = y[n-1] + \alpha\,\bigl(x[n] - y[n-1]\bigr)$$ $$\alpha \approx 0.605$$</div>
+            </div>
+        </div>
+        <p class="muted small">\(x[n]\): muestra que entra · \(y[n]\): muestra que sale · \(n-1\): la muestra anterior · \(T_s = 4\ \text{ms}\).</p>
+    </div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>5</span></div>
+</section>
+
+<!-- 6 · BPM -->
+<section class="slide" id="bpm">
+    <div>
+        <p class="kicker">La frecuencia cardíaca</p>
+        <h2>Cómo se calculan los latidos por minuto</h2>
+        <div class="cols">
+            <div>
+                <ol class="steps">
+                    <li><strong>Resaltar los QRS:</strong> un filtro de 5 a 15 Hz deja pasar los latidos y apaga las ondas P y T.</li>
+                    <li><strong>Convertir cada latido en un pulso:</strong> derivar, elevar al cuadrado y promediar 150 ms.</li>
+                    <li><strong>Umbral que se adapta:</strong> lo que lo supera es un latido.</li>
+                    <li><strong>Medir el tiempo entre latidos</strong> y aplicar la ecuación (6).</li>
+                </ol>
+                <p class="muted small">Es el algoritmo de Pan y Tompkins (1985).</p>
+            </div>
+            <div>
+                <div class="libro">
+                    <p class="nota"><b>Frecuencia cardíaca</b> (mediana de los últimos 8 intervalos)</p>
+                    $$\text{BPM} = \frac{60}{T_{RR}} \tag{6}$$
+                    <p class="ejemplo">Si los picos R están a \(T_{RR} = 0.8\ \text{s}\): \(\text{BPM} = 60/0.8 = 75\).</p>
+                </div>
+                <div class="card ok">
+                    <p><strong>Sin números inventados:</strong> si los electrodos están sueltos o hay mucho ruido, la página muestra «--» o un valor marcado como «estimado», y explica qué revisar.</p>
                 </div>
             </div>
         </div>
-        <aside class="notas"><strong>B.</strong> Las pruebas se ejecutaron con MariaDB (equivalente al MySQL de XAMPP): vuelvan a correrlas en su equipo el día anterior. Recomendación: antes de presentar, clonar el repositorio en limpio y seguir el README.</aside>
     </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>6</span></div>
 </section>
 
-<!-- 15 · Alcances y limitaciones -->
-<section class="slide" id="limites">
+<!-- 7 · Resultados -->
+<section class="slide" id="resultados">
     <div>
-        <p class="kicker">4 · Resultados y validación</p>
-        <h2>Alcances y limitaciones</h2>
+        <p class="kicker">Resultados</p>
+        <h2>Antes y después de filtrar</h2>
         <div class="cols">
-            <div class="card hl">
-                <h3>Alcances</h3>
-                <ul>
-                    <li>Cubre todo el ciclo de una señal: generación o adquisición, muestreo, visualización, FFT, filtrado y BPM.</li>
-                    <li>Hardware, servidor, base de datos y web <strong>sincronizados en tiempo real</strong>.</li>
-                    <li>Seguridad básica: bcrypt, cookie httpOnly, consultas parametrizadas, límite de intentos, lista cerrada de comandos.</li>
-                    <li>Demo web (Vercel) que abre desde cualquier celular, sin instalar nada.</li>
+            <figure><img src="img/filtrado_tiempo.png" alt="Señal con ruido en rosa y señal filtrada en verde, donde se ven con claridad los picos R"><figcaption>Rosa: señal con ruido · Verde: después de los tres filtros</figcaption></figure>
+            <div>
+                <div class="card hl">
+                    <p class="muted small">Error frente a la señal limpia</p>
+                    <p class="big">0.368 → 0.083 mV</p>
+                    <p>El ruido bajó unas 4 veces.</p>
+                </div>
+                <ul style="margin-top:0.8rem">
+                    <li>El BPM se mide con un error de <strong>±2 lpm</strong> entre 40 y 180 lpm.</li>
+                    <li>La FFT encuentra la frecuencia del latido: <strong>1.25 Hz → 75 lpm</strong>.</li>
+                    <li><strong>48 pruebas automáticas</strong> comprueban filtros, detector y servidor.</li>
                 </ul>
-            </div>
-            <div class="card alert">
-                <h3>Limitaciones (las decimos nosotros primero)</h3>
-                <ul>
-                    <li>La señal principal es <strong>sintética</strong>; la real exige el AD8232 con electrodos.</li>
-                    <li>Con relación señal/ruido muy baja (amplitud 0.3× con ruido 30 %) el detector puede fallar.</li>
-                    <li>Filtros del navegador causales y de bajo orden: atenúan menos y retrasan la fase.</li>
-                    <li>El ruido gaussiano no es ruido muscular real. Un solo canal, ADC de 10 bits (≈ 4.4 µV por cuenta).</li>
-                    <li><strong>No es un dispositivo médico</strong> ni sirve para diagnosticar.</li>
-                </ul>
+                <a class="btn" href="../index.html">Abrir el simulador</a>
             </div>
         </div>
-        <p style="margin-top:0.7rem" class="muted">Mejoras: validar contra registros reales (MIT-BIH, PhysioNet), filtros de mayor orden (IIR vs. FIR), más derivaciones y variabilidad de la frecuencia cardíaca.</p>
-        <aside class="notas"><strong>B.</strong> Ser honestos suma puntos. Si ya probaron el módulo AD8232 con electrodos reales, digan qué resultados obtuvieron y actualicen esta diapositiva; si no, indiquen que se validó con el Arduino simulado (mismo protocolo serial).</aside>
     </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>7</span></div>
 </section>
 
-<!-- 16 · Conclusiones -->
+<!-- 8 · Conclusiones -->
 <section class="slide" id="conclusiones">
     <div>
-        <p class="kicker">5 · Conclusiones</p>
-        <h2>Lo que aprendimos y cómo se conecta con la teoría</h2>
+        <p class="kicker">Cierre</p>
+        <h2>Conclusiones</h2>
         <div class="cols">
-            <ol>
-                <li>Un ECG reúne casi todo el curso: señal analógica, muestreo, ruido, Fourier y filtros.</li>
-                <li>La FFT vuelve visible lo que en el tiempo está mezclado: <strong>cada interferencia ocupa su zona del espectro</strong>.</li>
-                <li>Elegir <i>f<sub>s</sub></i> importa: con 250 Hz no hay aliasing; con muy pocas muestras sí.</li>
-                <li>Filtrar es un compromiso entre limpiar y deformar (causal vs. fase cero).</li>
-                <li>Llevar la teoría a un sistema completo obliga a decidir y a <strong>validar con pruebas</strong>: encontramos y corregimos fallos del detector gracias a ellas.</li>
-            </ol>
-            <div>
-                <h3>Conceptos de Teoría de Señales usados</h3>
-                <p>
-                    <span class="pill">Señales continuas y discretas</span><span class="pill">Muestreo y Nyquist</span><span class="pill">Cuantización (ADC)</span><span class="pill">Periodicidad: <i>T</i> = 60/BPM</span><span class="pill">Fourier y FFT</span><span class="pill">Resolución espectral Δ<i>f</i></span><span class="pill">Fuga espectral</span><span class="pill">Ruido e interferencia</span><span class="pill">Filtros pasa-altas / bajas / notch</span><span class="pill">Ecuaciones en diferencias (LTI)</span><span class="pill">Detección de eventos</span>
-                </p>
+            <ul>
+                <li>El ECG reúne los temas del curso: muestreo, frecuencia, ruido y filtros.</li>
+                <li>Ver la señal en <strong>frecuencia</strong> (FFT) permite elegir el filtro correcto para cada ruido.</li>
+                <li>Filtrar limpia la señal, pero también la deforma un poco: hay que buscar el equilibrio.</li>
+                <li>Un buen sistema reconoce cuándo la señal no es confiable en vez de dar un valor falso.</li>
+            </ul>
+            <div class="card">
+                <h3>Para mejorar</h3>
+                <p>Probar con más personas y con registros médicos reales (base MIT-BIH). Es un proyecto educativo: no sirve para diagnosticar.</p>
             </div>
         </div>
-        <aside class="notas"><strong>Ambos.</strong> Cierren los dos. Si no saben algo: «no lo implementamos, pero lo haríamos así…» es mejor que inventar.</aside>
-    </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
-</section>
-
-<!-- 17 · Referencias -->
-<section class="slide" id="referencias">
-    <div>
-        <p class="kicker">Referencias</p>
-        <h2>Fuentes técnicas y académicas</h2>
+        <h3 style="margin-top:1rem">Referencias</h3>
         <ol class="refs">
-            <li>Pan, J., &amp; Tompkins, W. J. (1985). A real-time QRS detection algorithm. <em>IEEE Transactions on Biomedical Engineering, BME-32</em>(3), 230–236.</li>
-            <li>McSharry, P. E., Clifford, G. D., Tarassenko, L., &amp; Smith, L. A. (2003). A dynamical model for generating synthetic electrocardiogram signals. <em>IEEE Transactions on Biomedical Engineering, 50</em>(3), 289–294.</li>
-            <li>Oppenheim, A. V., &amp; Schafer, R. W. (2010). <em>Discrete-Time Signal Processing</em> (3rd ed.). Pearson.</li>
-            <li>Cooley, J. W., &amp; Tukey, J. W. (1965). An algorithm for the machine calculation of complex Fourier series. <em>Mathematics of Computation, 19</em>(90), 297–301.</li>
-            <li>Moody, G. B., &amp; Mark, R. G. (2001). The impact of the MIT-BIH Arrhythmia Database. <em>IEEE Engineering in Medicine and Biology Magazine, 20</em>(3), 45–50.</li>
-            <li>Analog Devices. <em>AD8232: Single-Lead, Heart Rate Monitor Front End</em> (hoja de datos).</li>
+            <li>Pan, J. y Tompkins, W. J. (1985). A real-time QRS detection algorithm. <em>IEEE Trans. Biomed. Eng.</em>, 32(3), 230–236.</li>
+            <li>Oppenheim, A. V. y Schafer, R. W. (2010). <em>Discrete-Time Signal Processing</em> (3.ª ed.). Pearson.</li>
+            <li>Analog Devices. <em>AD8232: Single-Lead Heart Rate Monitor Front End</em> (hoja de datos).</li>
         </ol>
-        <p style="margin-top:1rem">Repositorio: <a href="https://github.com/JeroSoto/teoria_de_senales_ecg_arduino">github.com/JeroSoto/teoria_de_senales_ecg_arduino</a></p>
-        <p class="muted">¿Preguntas?</p>
+        <p class="lead" style="margin-top:0.8rem">¿Preguntas?</p>
     </div>
-    <div class="pie"><span>Proyecto educativo · no es una herramienta de diagnóstico clínico</span><span></span></div>
+    <div class="pie"><span>Proyecto educativo · no es un dispositivo médico</span><span>8</span></div>
 </section>
 
 <script>
-    // Navegación con teclado, barra de progreso y notas del orador
+    // Fórmulas: KaTeX convierte $$…$$ (centradas) y \( … \) (en el texto) en notación de libro
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof renderMathInElement !== 'function') return;   // sin Internet quedan como texto
+        renderMathInElement(document.body, {
+            delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\(', right: '\\)', display: false }],
+            throwOnError: false,
+        });
+    });
+
+    // Navegación con teclado y barra de progreso
     (function () {
         const slides = Array.from(document.querySelectorAll('.slide'));
         const contador = document.getElementById('contador');
         const progreso = document.getElementById('progreso');
-        const btnNotas = document.getElementById('btnNotas');
-        let actual = 0;
 
         function indiceVisible() {
             const mitad = window.innerHeight / 2;
@@ -605,29 +402,22 @@ polos en radio r = 0.95</div>
             return mejor;
         }
         function actualizar() {
-            actual = indiceVisible();
+            const actual = indiceVisible();
             contador.textContent = (actual + 1) + ' / ' + slides.length;
             progreso.style.width = ((actual + 1) / slides.length * 100) + '%';
         }
         function ir(i) {
-            actual = Math.max(0, Math.min(slides.length - 1, i));
-            slides[actual].scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        function alternarNotas() {
-            const activo = document.body.classList.toggle('ver-notas');
-            btnNotas.setAttribute('aria-pressed', String(activo));
+            slides[Math.max(0, Math.min(slides.length - 1, i))].scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
         window.addEventListener('scroll', actualizar, { passive: true });
         window.addEventListener('resize', actualizar);
-        btnNotas.addEventListener('click', alternarNotas);
         document.addEventListener('keydown', (e) => {
             if (e.metaKey || e.ctrlKey || e.altKey) return;
             if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); ir(indiceVisible() + 1); }
             else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); ir(indiceVisible() - 1); }
             else if (e.key === 'Home') { e.preventDefault(); ir(0); }
             else if (e.key === 'End') { e.preventDefault(); ir(slides.length - 1); }
-            else if (e.key === 'n' || e.key === 'N') alternarNotas();
             else if (e.key === 'f' || e.key === 'F') {
                 try {
                     if (document.fullscreenElement) document.exitFullscreen();
